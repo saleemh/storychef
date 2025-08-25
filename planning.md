@@ -4,17 +4,49 @@
 A client-server command-line interactive storytelling app that generates stories continuously using AI models, 4-6 sentences at a time every 30 seconds. Users seed the initial story themselves and can inject custom instructions at any moment to influence the narrative in real-time. Stories have a 10-minute time limit with automatic conclusion. Features persistent server sessions, robust multiplayer with seamless join/drop handling, and streamlined post-story rating system.
 
 ## Technology Stack
-- **Architecture**: Client-server separation with Socket.io communication
-- **Server**: Node.js server handling AI integration, session management, and logging
-- **Client**: Terminal-based client connecting to local or remote servers
-- **Configuration**: JSON config files with in-game editing interface
-- **AI Integration**: LiteLLM for unified access to 100+ LLM providers (OpenAI, Claude, Ollama, etc.)
-- **Networking**: Socket.io for real-time multiplayer with reconnection handling
-- **File System**: Server-side logging, session persistence, and story exports
-- **CLI Framework**: Commander.js for argument parsing
-- **Terminal UI**: Blessed.js for multiple view management and real-time updates
-- **Session Management**: Redis or in-memory store for persistent game sessions with auto-cleanup
-- **Performance**: Connection pooling, AI request queuing, memory-efficient session storage
+
+### Core Dependencies
+- **Node.js**: Runtime environment (v18+ required)
+- **Socket.io**: Real-time bidirectional event-based communication
+  - Server: `socket.io` package
+  - Client: Socket.io client connection
+  - Documentation: https://socket.io/docs/
+- **LiteLLM**: Unified interface for 100+ LLM providers
+  - Install: `pip install litellm` (Python package, called via child_process)
+  - Documentation: https://docs.litellm.ai/
+  - GitHub: https://github.com/BerriAI/litellm
+- **PDL (Prompt Declaration Language)**: Advanced prompt management
+  - GitHub: https://github.com/IBM/prompt-declaration-language
+  - Documentation: https://github.com/IBM/prompt-declaration-language/tree/main/docs
+  - Python SDK: `pip install prompt-declaration-language`
+- **Commander.js**: CLI argument parsing
+  - Install: `npm install commander`
+  - Documentation: https://github.com/tj/commander.js
+- **Blessed.js**: Terminal UI library for rich interface elements
+  - Install: `npm install blessed`
+  - Documentation: https://github.com/chjj/blessed
+  - Alternative: `neo-blessed` for better maintenance
+- **Express.js**: Web server for frontend (Phase 4)
+  - Install: `npm install express`
+  - Documentation: https://expressjs.com/
+- **xterm.js**: Terminal emulator for web frontend
+  - Install: `npm install xterm`
+  - Documentation: https://xtermjs.org/
+  - CDN: https://unpkg.com/xterm@latest/
+
+### Data Storage
+- **SQLite**: Local database for leaderboards and persistent data
+  - Install: `npm install sqlite3`
+  - Alternative: `better-sqlite3` for synchronous operations
+- **File System**: JSON for configuration, markdown for exports
+- **Session Storage**: In-memory with optional Redis scaling
+  - Redis: `npm install redis` (optional for production scaling)
+
+### Architecture Pattern
+- **Client-Server**: Separate processes communicating via Socket.io
+- **Event-Driven**: All interactions handled through Socket.io events
+- **Modular**: Clear separation of concerns across modules
+- **Scalable**: Designed for multiple concurrent sessions
 
 ## Configuration System (`story-chef.config.json`)
 ```json
@@ -120,6 +152,34 @@ Press `C` during the pre-game setup to access the configuration panel:
 Select option to edit (1-11) or press ESC to return: _
 
 Available Providers: openai, anthropic, ollama/llama3, together_ai/meta-llama, etc.
+```
+
+### PDL Implementation Details
+
+**PDL (Prompt Declaration Language)** is IBM's declarative language for LLM prompt management.
+
+**Key PDL Concepts:**
+- **Templates**: Reusable prompt definitions with variable substitution
+- **Model Specification**: Declare which model to use per template
+- **Variable Substitution**: `${variable_name}` syntax for dynamic content
+- **Multiple Models**: Can use different models for different tasks
+- **Type Safety**: Built-in validation for inputs/outputs
+
+**Integration with LiteLLM:**
+1. PDL templates define the prompts
+2. LiteLLM executes the model calls
+3. Variables populated from game state
+4. Responses processed and integrated into story flow
+
+**Installation:**
+```bash
+pip install prompt-declaration-language
+```
+
+**Basic PDL Usage:**
+```python
+from pdl import exec_dict
+result = exec_dict(template_dict, context_variables)
 ```
 
 ### PDL Prompt Configuration (`prompts/story-prompts.pdl`)
@@ -968,98 +1028,405 @@ Upload score to global leaderboard? (Y/N): _
 
 ## Technical Architecture
 
-### Core Components
+### Socket.io Event System
+
+**Client-Server Communication Events:**
+
+**Client → Server Events:**
+- `join_session`: Join existing session with code
+- `create_session`: Create new session
+- `story_seed`: Submit initial story seed
+- `direct_input`: Submit direct story content
+- `influence_input`: Submit story influence
+- `skip_request`: Request to skip waiting period
+- `view_goals`: Request to view competition goals
+- `config_update`: Update game configuration
+- `disconnect`: Handle client disconnection
+
+**Server → Client Events:**
+- `session_created`: Confirm session creation with code
+- `session_joined`: Confirm joining session
+- `session_update`: Update session state (players, timer, etc.)
+- `story_segment`: New story segment generated
+- `goals_assigned`: Competition goals for player
+- `player_joined`: New player joined notification
+- `player_left`: Player left notification
+- `competition_results`: Final competition scores
+- `story_complete`: Story concluded with export data
+
+**Session State Management:**
 ```javascript
-// Continuous story generation with segments
-class StoryEngine {
-  constructor(config) {
-    this.segmentLength = config.storyPacing.segmentLength;
-    this.segmentDelay = config.storyPacing.segmentDelay;
-    this.initialDelay = config.storyPacing.initialDelay;
-    this.timeLimit = config.storyPacing.storyTimeLimit;
-  }
-  
-  async generateSegment(context, userInputs) {
-    // Process all pending user inputs
-    // Generate 4-6 sentence segment
-    // Update story state
-  }
-  
-  startContinuousGeneration() {
-    // Initial delay before first segment
-    // Timer-based segment generation
-    // Input integration
-    // Real-time updates
+// Session state structure
+{
+  sessionId: "MAGIC-FOREST-7429",
+  players: [
+    {
+      id: "player_123",
+      name: "SaleemTheGreat",
+      isHost: true,
+      ipAddress: "192.168.1.100",
+      goals: [...], // competition goals (private)
+      contributions: {
+        directWords: 287,
+        influenceWords: 623,
+        inputCount: 18
+      }
+    }
+  ],
+  storyState: {
+    segments: [...],
+    currentContext: "...",
+    timeRemaining: 450000,
+    isActive: true
+  },
+  config: {...},
+  competitionMode: true
+}
+```
+
+### LiteLLM Integration Pattern
+
+**Python Bridge Script (`src/server/litellm_bridge.py`):**
+```python
+#!/usr/bin/env python3
+import sys
+import json
+import litellm
+from pdl import exec_dict
+import yaml
+
+def main():
+    # Read input from stdin (sent from Node.js)
+    input_data = json.loads(sys.stdin.read())
+    
+    # Load PDL template
+    with open(input_data['pdl_file'], 'r') as f:
+        pdl_config = yaml.safe_load(f)
+    
+    # Execute PDL template with variables
+    result = exec_dict(pdl_config['defs'][input_data['template']], input_data['variables'])
+    
+    # Return result to Node.js
+    print(json.dumps(result))
+
+if __name__ == "__main__":
+    main()
+```
+
+**Node.js LiteLLM Integration:**
+```javascript
+const { spawn } = require('child_process');
+const path = require('path');
+
+class LiteLLMBridge {
+  async executeTemplate(templateName, variables) {
+    return new Promise((resolve, reject) => {
+      const python = spawn('python3', [path.join(__dirname, 'litellm_bridge.py')]);
+      
+      const inputData = {
+        pdl_file: this.config.prompts.configFile,
+        template: templateName,
+        variables: variables
+      };
+      
+      python.stdin.write(JSON.stringify(inputData));
+      python.stdin.end();
+      
+      let output = '';
+      python.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      python.on('close', (code) => {
+        if (code === 0) {
+          resolve(JSON.parse(output));
+        } else {
+          reject(new Error(`Python process exited with code ${code}`));
+        }
+      });
+    });
   }
 }
+```
 
-// Multi-view terminal interface  
-class TerminalViews {
+### Blessed.js Terminal UI Implementation
+
+**Blessed.js Basics:**
+- Screen: Root container for all UI elements
+- Boxes: Rectangular containers with borders, content
+- Lists: Scrollable list elements
+- Forms: Input handling elements
+- Events: Key bindings, mouse handling
+
+**Multi-View Implementation:**
+```javascript
+const blessed = require('blessed');
+
+class TerminalUI {
   constructor() {
-    this.views = ['story', 'liveInput', 'chat'];
+    this.screen = blessed.screen({
+      smartCSR: true,
+      title: 'Story Chef'
+    });
+    
+    this.views = ['story', 'direct', 'influence', 'live', 'chat'];
     this.currentView = 0;
+    this.competitionMode = false;
+    
+    this.setupViews();
+    this.setupKeyBindings();
   }
   
-  cycleView() { /* Shift+Tab handling */ }
-  updateView(viewName, content) { /* Real-time updates */ }
+  setupViews() {
+    // Story View - Main story display
+    this.storyBox = blessed.box({
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '80%',
+      border: { type: 'line' },
+      scrollable: true,
+      alwaysScroll: true,
+      tags: true,
+      label: ' Story View '
+    });
+    
+    // Input Box - Bottom section for user input
+    this.inputBox = blessed.textbox({
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: 3,
+      border: { type: 'line' },
+      inputOnFocus: true,
+      label: ' [INFLUENCE MODE] Type your influence '
+    });
+    
+    // Goals Overlay - Competition mode goals display
+    this.goalsOverlay = blessed.box({
+      top: 'center',
+      left: 'center',
+      width: 80,
+      height: 20,
+      border: { type: 'line' },
+      hidden: true,
+      label: ' YOUR SECRET GOALS '
+    });
+    
+    this.screen.append(this.storyBox);
+    this.screen.append(this.inputBox);
+    this.screen.append(this.goalsOverlay);
+  }
+  
+  setupKeyBindings() {
+    // Shift+Tab: Cycle views
+    this.screen.key(['S-tab'], () => {
+      this.cycleView();
+    });
+    
+    // G: Show goals (competition mode)
+    this.screen.key(['g'], () => {
+      if (this.competitionMode) {
+        this.toggleGoalsView();
+      }
+    });
+    
+    // Down Arrow: Skip wait
+    this.screen.key(['down'], () => {
+      this.emitSkipRequest();
+    });
+    
+    // C: Configuration panel
+    this.screen.key(['c'], () => {
+      this.showConfigPanel();
+    });
+    
+    // ESC/Ctrl+C: Exit
+    this.screen.key(['escape', 'C-c'], () => {
+      process.exit(0);
+    });
+  }
 }
+```
 
-// Multi-session management with robust connection handling
-class SessionManager {
-  constructor() {
-    this.activeSessions = new Map(); // sessionId -> Session
-    this.playerStates = new Map();   // playerId -> PlayerState
-    this.reconnectQueues = new Map(); // playerId -> ReconnectInfo
-    this.logger = new SessionLogger();
-  }
-  
-  handlePlayerDisconnect(playerId, sessionId) {
-    this.logger.warn(`[${sessionId}] Player '${playerId}' disconnected, attempting reconnection`);
-    // Keep player slot for 60 seconds
-    // Continue story with remaining players
-    // Queue player for reconnection
-  }
-  
-  handlePlayerReconnect(playerId, sessionId) {
-    this.logger.info(`[${sessionId}] Player '${playerId}' reconnected successfully`);
-    // Restore player state
-    // Send missed story segments
-    // Resume normal participation
-  }
-  
-  handleLateJoin(playerId, sessionId, ipAddress) {
-    this.logger.info(`[${sessionId}] Player '${playerId}' joined from ${ipAddress}`);
-    // Generate story summary
-    // Add player to active session
-    // Notify other players
-  }
-  
-  createSession(sessionId) {
-    this.logger.info(`[${sessionId}] New session created`);
-    // Create new session instance
-  }
-}
+### Database Schema (SQLite)
 
-// Simplified rating system
-class RatingSystem {
-  constructor() {
-    this.ratings = new Map();
+**Global Leaderboard Table:**
+```sql
+CREATE TABLE leaderboard (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_name TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    max_score INTEGER NOT NULL,
+    difficulty TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    session_id TEXT,
+    story_title TEXT,
+    goals_achieved TEXT -- JSON array of goal details
+);
+
+CREATE INDEX idx_score_difficulty ON leaderboard(difficulty, score DESC);
+CREATE INDEX idx_timestamp ON leaderboard(timestamp DESC);
+```
+
+**Sessions Table:**
+```sql
+CREATE TABLE sessions (
+    session_id TEXT PRIMARY KEY,
+    story_title TEXT,
+    duration INTEGER,
+    player_count INTEGER,
+    competition_mode BOOLEAN,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    story_content TEXT,
+    export_path TEXT
+);
+```
+
+### Core Components Implementation
+```javascript
+const EventEmitter = require('events');
+const blessed = require('blessed');
+const { spawn } = require('child_process');
+
+// Story generation engine with AI integration
+class StoryEngine extends EventEmitter {
+  constructor(config, liteLLMBridge) {
+    super();
+    this.config = config;
+    this.ai = liteLLMBridge;
+    this.segments = [];
+    this.pendingInputs = { direct: [], influence: [] };
+    this.timer = null;
   }
   
-  async collectPlayerRating(playerId) {
-    const rating = {
-      stars: await this.promptForStarRating(1, 5),
-      comments: await this.promptForComments(),
-      timestamp: new Date()
+  async generateSegment(sessionState) {
+    const hasDirectInputs = this.pendingInputs.direct.length > 0;
+    const template = hasDirectInputs ? 'story_segment_with_direct' : 'story_segment_generation';
+    
+    const variables = {
+      model_provider: this.config.aiModel.provider,
+      model_name: this.config.aiModel.model,
+      temperature: this.config.aiModel.temperature,
+      max_tokens: this.config.aiModel.maxTokens,
+      story_context: this.getStoryContext(),
+      player_influences: this.formatInfluences(),
+      player_direct_content: this.formatDirectContent()
     };
     
-    this.ratings.set(playerId, rating);
-    return rating;
+    try {
+      const result = await this.ai.executeTemplate(template, variables);
+      const newSegment = {
+        text: result.content,
+        timestamp: new Date(),
+        segmentNumber: this.segments.length + 1
+      };
+      
+      this.segments.push(newSegment);
+      this.clearPendingInputs();
+      this.emit('segment_generated', newSegment);
+      
+      return newSegment;
+    } catch (error) {
+      this.emit('error', error);
+      throw error;
+    }
   }
   
-  calculateAverageRating() {
-    const ratings = Array.from(this.ratings.values());
-    return ratings.reduce((sum, r) => sum + r.stars, 0) / ratings.length;
+  startContinuousGeneration(sessionState) {
+    const delay = sessionState.storyState.timeRemaining > 0 ? 
+      this.config.storyPacing.segmentDelay : 0;
+    
+    this.timer = setTimeout(async () => {
+      if (sessionState.storyState.isActive) {
+        await this.generateSegment(sessionState);
+        this.startContinuousGeneration(sessionState);
+      }
+    }, delay);
+  }
+}
+
+// Competition engine for goal generation and scoring
+class CompetitionEngine extends EventEmitter {
+  constructor(config, liteLLMBridge, database) {
+    super();
+    this.config = config;
+    this.ai = liteLLMBridge;
+    this.db = database;
+  }
+  
+  async generateGoalsForPlayer(playerId, difficulty = 'medium') {
+    const variables = {
+      model_provider: this.config.aiModel.provider,
+      model_name: this.config.aiModel.model,
+      goals_count: this.config.competition.goalsPerPlayer,
+      difficulty: difficulty
+    };
+    
+    try {
+      const result = await this.ai.executeTemplate('competition_goal_generation', variables);
+      const goals = this.parseGoals(result.content);
+      
+      return goals.map((goal, index) => ({
+        id: `${playerId}_goal_${index + 1}`,
+        text: goal,
+        playerId: playerId,
+        achieved: false,
+        score: 0
+      }));
+    } catch (error) {
+      this.emit('error', error);
+      throw error;
+    }
+  }
+  
+  async scoreGoals(playerGoals, fullStory) {
+    const scoredGoals = [];
+    
+    for (const goal of playerGoals) {
+      const variables = {
+        model_provider: this.config.aiModel.provider,
+        model_name: this.config.aiModel.model,
+        full_story: fullStory,
+        goal_statement: goal.text
+      };
+      
+      try {
+        const result = await this.ai.executeTemplate('competition_goal_scoring', variables);
+        const scoreMatch = result.content.match(/Score:\s*([1-3])/);
+        const score = scoreMatch ? parseInt(scoreMatch[1]) : 1;
+        
+        scoredGoals.push({
+          ...goal,
+          score: score,
+          evaluation: result.content,
+          achieved: score > 1
+        });
+      } catch (error) {
+        this.emit('error', error);
+        scoredGoals.push({ ...goal, score: 1, evaluation: 'Scoring failed' });
+      }
+    }
+    
+    return scoredGoals;
+  }
+  
+  async saveToGlobalLeaderboard(playerName, totalScore, maxScore, difficulty, sessionData) {
+    const query = `
+      INSERT INTO leaderboard (player_name, score, max_score, difficulty, session_id, story_title, goals_achieved)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    
+    return this.db.run(query, [
+      playerName,
+      totalScore,
+      maxScore,
+      difficulty,
+      sessionData.sessionId,
+      sessionData.storyTitle,
+      JSON.stringify(sessionData.goalsAchieved)
+    ]);
   }
 }
 ```
@@ -1068,65 +1435,138 @@ class RatingSystem {
 ```
 story-chef/
 ├── src/
-│   ├── cli.js (main entry point)
+│   ├── cli.js (main entry point - uses Commander.js for args)
 │   ├── server/
-│   │   ├── server.js (story chef server)
-│   │   ├── webServer.js (express + socket.io web frontend)
-│   │   ├── sessionManager.js (session persistence + performance)
-│   │   ├── storyEngine.js (LiteLLM + PDL integration)
-│   │   ├── aiQueue.js (AI request queuing and rate limiting)
-│   │   ├── competitionEngine.js (goal generation, scoring, leaderboards)
-│   │   ├── globalLeaderboard.js (persistent score tracking)
-│   │   ├── logger.js (server logging)
-│   │   └── ratingSystem.js (rating collection)
+│   │   ├── server.js (main Socket.io server)
+│   │   ├── webServer.js (Express.js + xterm.js frontend)
+│   │   ├── sessionManager.js (session state management)
+│   │   ├── storyEngine.js (story generation with AI)
+│   │   ├── competitionEngine.js (goal generation and scoring)
+│   │   ├── globalLeaderboard.js (SQLite database operations)
+│   │   ├── litellm_bridge.py (Python script for LiteLLM/PDL)
+│   │   ├── aiQueue.js (request queuing and rate limiting)
+│   │   ├── logger.js (structured logging)
+│   │   └── ratingSystem.js (post-story ratings)
 │   ├── client/
-│   │   ├── client.js (game client)
+│   │   ├── client.js (Socket.io client connection)
 │   │   ├── ui/
-│   │   │   ├── gameView.js
-│   │   │   ├── configPanel.js
-│   │   │   ├── competitionView.js (goals display, leaderboard)
-│   │   │   └── viewManager.js
-│   │   └── inputProcessor.js (input handling)
+│   │   │   ├── terminalUI.js (Blessed.js interface implementation)
+│   │   │   ├── gameView.js (story display, input handling)
+│   │   │   ├── configPanel.js (in-game config editor)
+│   │   │   ├── competitionView.js (goals display, results)
+│   │   │   └── viewManager.js (view cycling logic)
+│   │   └── inputProcessor.js (user input validation)
 │   ├── shared/
-│   │   ├── config.js (config management)
-│   │   └── exportEngine.js (markdown generation)
+│   │   ├── config.js (JSON config file handling)
+│   │   ├── utils.js (common utilities)
+│   │   └── exportEngine.js (markdown export generation)
 ├── web/
 │   ├── index.html (xterm.js terminal interface)
-│   ├── story-chef-web.js (web client logic)
-│   ├── xterm.min.js
-│   ├── xterm.css
-│   └── socket.io.min.js
+│   ├── story-chef-web.js (web client Socket.io connection)
+│   ├── xterm.min.js (terminal emulator library)
+│   ├── xterm.css (terminal styling)
+│   └── socket.io.min.js (Socket.io client library)
 ├── prompts/
-│   └── story-prompts.pdl (PDL prompt templates)
+│   └── story-prompts.pdl (PDL YAML templates for all AI interactions)
 ├── data/
-│   ├── leaderboards.db (global competition scores)
-│   └── [persistent session data]
+│   ├── leaderboards.db (SQLite database for global scores)
+│   └── sessions.db (SQLite database for session history)
 ├── logs/
-│   └── [server session logs]
+│   └── [timestamped server logs by session]
 ├── exports/
-│   └── [generated story files]
-├── story-chef.config.json
-└── package.json
+│   └── [generated markdown story files]
+├── requirements.txt (Python dependencies: litellm, prompt-declaration-language)
+├── package.json (Node.js dependencies and scripts)
+├── story-chef.config.json (main configuration file)
+└── README.md (setup and usage instructions)
+```
+
+## Installation & Setup Instructions
+
+### Prerequisites
+- **Node.js v18+**: Download from https://nodejs.org/
+- **Python 3.8+**: Download from https://python.org/
+- **Git**: For cloning and version control
+
+### Installation Steps
+```bash
+# Clone the repository
+git clone https://github.com/your-repo/story-chef.git
+cd story-chef
+
+# Install Node.js dependencies
+npm install
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Initialize databases
+node src/server/globalLeaderboard.js --init
+
+# Start the server
+npm run server
+
+# In another terminal, start a client
+npm run client
+```
+
+### Package.json Scripts
+```json
+{
+  "scripts": {
+    "server": "node src/cli.js server",
+    "client": "node src/cli.js start",
+    "web": "node src/cli.js server --web",
+    "init-db": "node src/server/globalLeaderboard.js --init",
+    "test": "jest",
+    "lint": "eslint src/"
+  }
+}
+```
+
+### Requirements.txt
+```
+litellm>=1.0.0
+prompt-declaration-language>=0.1.0
+PyYAML>=6.0
+```
+
+### Environment Variables
+```bash
+# Optional: Set API keys as environment variables
+export OPENAI_API_KEY="your-openai-key"
+export ANTHROPIC_API_KEY="your-anthropic-key"
 ```
 
 ## Development Phases
 
 ### Phase 1: Core Foundation
-**Testable Deliverables:**
-- Basic client-server architecture with Socket.io communication
-- Server can start/stop and accept client connections
-- LiteLLM integration supporting OpenAI, Claude, and local models
-- PDL prompt configuration system with template loading
-- Single-player story seeding (30-second timer with ↓ skip)
-- AI story segment generation using PDL templates
-- Basic dual input modes (Direct Story vs Influence)
-- Competition mode: goal generation and basic scoring
-- Goals viewing interface (G key)
-- Contribution tracking system (word counts, input types)
-- Basic terminal UI with Shift+Tab view cycling
-- Simple story export with contribution analytics
+**Implementation Priority Order:**
+1. **Setup Project Structure**: Create all directories and base files
+2. **Configuration System**: Implement JSON config loading and validation
+3. **LiteLLM Bridge**: Create Python script for AI model integration
+4. **PDL Templates**: Write basic story generation prompts
+5. **Socket.io Server**: Basic server with session management
+6. **Terminal Client**: Basic Blessed.js interface with key bindings
+7. **Story Engine**: Core story generation with timer
+8. **Input Processing**: Dual input modes (Direct/Influence)
+9. **Competition Engine**: Goal generation and basic scoring
+10. **Export System**: Basic markdown export
 
-**Testing:** Can start server, connect client, seed a story, use both Direct and Influence input modes, generate competitive goals, view goals during gameplay, generate AI segments that weave both input types, and export story with basic analytics and competition results.
+**Key Implementation Details:**
+- Use `child_process.spawn()` to call Python script for AI
+- Store session state in memory using Maps
+- Use Blessed.js textbox for input, box for story display
+- Implement event-driven architecture throughout
+- Generate session IDs using random words (e.g., "MAGIC-FOREST-7429")
+
+**Testing Criteria:**
+- Server starts and accepts connections on configured port
+- Client connects and displays story interface correctly  
+- Story seeding works with 30-second timer and skip functionality
+- Both input modes submit to server and integrate into story
+- Competition goals generate and display properly
+- Story exports to markdown with all analytics
 
 ### Phase 2: Multiplayer & Controls
 **Testable Deliverables:**
