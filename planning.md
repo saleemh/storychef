@@ -51,6 +51,12 @@ A client-server command-line interactive storytelling app that generates stories
     "enabled": false,
     "port": 3001,
     "staticPath": "./web"
+  },
+  "competition": {
+    "enabled": false,
+    "goalsPerPlayer": 5,
+    "difficulty": "medium",
+    "globalLeaderboard": true
   }
 }
 ```
@@ -77,6 +83,10 @@ A client-server command-line interactive storytelling app that generates stories
 - **webFrontend.enabled**: Enable web terminal interface (default: false)
 - **webFrontend.port**: Web frontend port (default: 3001)
 - **webFrontend.staticPath**: Path to web frontend files
+- **competition.enabled**: Enable competition mode with secret goals (default: false)
+- **competition.goalsPerPlayer**: Number of secret goals per player (default: 5)
+- **competition.difficulty**: Goal difficulty level ("easy", "medium", "hard", default: "medium")
+- **competition.globalLeaderboard**: Enable global leaderboard for solo play (default: true)
 
 ### Multi-Session Server Logging
 The server handles multiple concurrent sessions with session-specific logging:
@@ -103,8 +113,11 @@ Press `C` during the pre-game setup to access the configuration panel:
 6. Seeding Time: 30 seconds
 7. Max Players: 100
 8. Allow Late Joins: Yes
+9. Competition Mode: Off
+10. Goals Per Player: 5
+11. Goal Difficulty: Medium
 
-Select option to edit (1-8) or press ESC to return: _
+Select option to edit (1-11) or press ESC to return: _
 
 Available Providers: openai, anthropic, ollama/llama3, together_ai/meta-llama, etc.
 ```
@@ -215,6 +228,62 @@ defs:
       - Their distinctive contribution to the story's development
       
       Author Summary:
+
+  # Competition Mode PDL Templates
+  
+  competition_goal_generation:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: 1.0
+      max_tokens: 150
+    input: |
+      Generate ${goals_count} highly specific, creative, and unusual story goals for a competitive storytelling game.
+      
+      Difficulty Level: ${difficulty}
+      - Easy: Simple character actions or obvious events
+      - Medium: Specific unusual events with named elements
+      - Hard: Complex multi-part scenarios with precise details
+      
+      Requirements for each goal:
+      - Must be a specific, measurable occurrence 
+      - Should be unusual and creative, not generic
+      - Must be achievable within a 10-minute collaborative story
+      - Should include specific named elements (characters, objects, places)
+      - Must be independent of any story theme or setting
+      
+      Example goals:
+      - "A character named Dr. Vasquez discovers a glowing purple mushroom that can translate ancient languages"
+      - "Someone receives a mysterious phone call from their future self warning about Tuesday"
+      - "A mechanical clockwork bird delivers a message written in invisible ink"
+      
+      Generate ${goals_count} unique goals at ${difficulty} difficulty level:
+
+  competition_goal_scoring:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: 0.1
+      max_tokens: 100
+    input: |
+      You are judging whether specific goals were achieved in a collaborative story.
+      
+      Scoring System:
+      - Score 1: The goal did not happen in the story at all
+      - Score 2: Something similar to the goal happened, but not exactly as stated
+      - Score 3: The exact goal occurred as stated in the story
+      
+      Story Content:
+      ${full_story}
+      
+      Goal to Evaluate: "${goal_statement}"
+      
+      Evaluation Criteria:
+      - Score 3 requires ALL specific elements to match (names, objects, actions)
+      - Score 2 for partial matches or similar but different versions
+      - Score 1 if the core concept is absent
+      
+      Provide only the score (1, 2, or 3) and a brief 10-word explanation.
+      
+      Score and Explanation:
 ```
 
 ## Enhanced Features
@@ -594,7 +663,153 @@ Be as creative as you want - this will shape the entire story!
 💬 Type your story seed: _
 ```
 
-### 7. Enhanced Story Export with Authorship Analytics
+### 7. Competition Mode with Secret Goals
+
+#### Goal Generation Phase
+When competition mode is enabled, each player receives secret goals after joining:
+
+```
+🏆 COMPETITION MODE ENABLED 🏆
+Generating your secret goals...
+
+═══════════════════════════════════════════════════════════════
+📋 YOUR SECRET GOALS (Keep these secret from other players!)
+═══════════════════════════════════════════════════════════════
+
+Goal 1: A character named Marcus finds a vintage radio that can only play songs from the 1940s
+Goal 2: Someone discovers a hidden message inside the pages of an old cookbook  
+Goal 3: A magical creature offers to trade knowledge for exactly three golden coins
+Goal 4: The phrase "clockwise until midnight" becomes important to solving a problem
+Goal 5: A character realizes they've been wearing someone else's shoes the entire time
+
+Press G anytime during the story to view your goals again
+═══════════════════════════════════════════════════════════════
+
+Waiting for other players to receive their goals...
+👥 Players ready: 2/3 (SaleemTheGreat, MagicFan2024) 
+⏳ Waiting for: WizardMaster99...
+```
+
+#### Competition Gameplay Experience
+Players can reference goals during gameplay:
+
+```
+📖 Story View                                  [⏰ 15s] | 👥 3 | 🕐 7:42
+════════════════════════════════════════════════════════════════════
+
+Alex stepped into the dusty antique shop, drawn by the warm glow 
+emanating from behind towers of forgotten treasures. The shopkeeper, 
+an elderly woman with knowing eyes, gestured toward a collection 
+of vintage items. "Everything here has a story," she whispered 
+mysteriously. Marcus, Alex's curious friend, immediately gravitated 
+toward an old radio sitting on a wooden shelf.
+
+[🎯 Generating next segment in 15 seconds...]
+
+════════════════════════════════════════════════════════════════════
+
+💬 [DIRECT MODE] Add to story: Marcus turned the radio dial and was surprised to hear Glenn Miller's "In the Mood" crackling through the static, as if the radio could only tune to stations from decades past_
+
+Press G to view your secret goals | Shift+Tab for other views
+```
+
+#### Goals Reference View (G key)
+```
+📋 YOUR SECRET GOALS                           [⏰ 8s] | 👥 3 | 🕐 7:42
+════════════════════════════════════════════════════════════════════
+
+✅ Goal 1: A character named Marcus finds a vintage radio that can only play songs from the 1940s
+   [ACHIEVED! - Just happened in current segment]
+
+❓ Goal 2: Someone discovers a hidden message inside the pages of an old cookbook  
+❓ Goal 3: A magical creature offers to trade knowledge for exactly three golden coins
+❓ Goal 4: The phrase "clockwise until midnight" becomes important to solving a problem
+❓ Goal 5: A character realizes they've been wearing someone else's shoes the entire time
+
+Score Progress: 1/5 goals likely achieved
+════════════════════════════════════════════════════════════════════
+
+Press any key to return to story...
+```
+
+#### Post-Game Competition Results
+```
+🎉 STORY COMPLETE! 🎉
+Final time: 10:00 | Total segments: 20 | Players: 3
+
+🏆 COMPETITION RESULTS 🏆
+═══════════════════════════════════════════════════════════════
+
+🥇 WINNER: MagicFan2024 (12 points)
+🥈 2nd Place: SaleemTheGreat (9 points) 
+🥉 3rd Place: WizardMaster99 (7 points)
+
+═══════════════════════════════════════════════════════════════
+📊 INDIVIDUAL SCORES
+═══════════════════════════════════════════════════════════════
+
+🏆 MagicFan2024 - 12/15 points:
+✅ Goal 1 (3pts): A character finds a secret door behind a bookshelf
+✅ Goal 2 (3pts): Someone mentions they've lived in this town for exactly 7 years  
+⚠️ Goal 3 (2pts): A wise old woman gives cryptic advice (similar to "wise elder shares ancient knowledge")
+⚠️ Goal 4 (2pts): Characters discover footprints in mud (similar to "tracking mysterious prints")
+⚠️ Goal 5 (2pts): Someone feels homesick (similar to "character yearns for distant place")
+
+👤 SaleemTheGreat - 9/15 points:
+✅ Goal 1 (3pts): A character named Marcus finds vintage radio playing 1940s music
+⚠️ Goal 2 (2pts): Hidden note found in book (similar to "message in cookbook pages")
+❌ Goal 3 (1pt): Magical trade for golden coins (not achieved)
+✅ Goal 4 (3pts): "Clockwise until midnight" solves the final puzzle
+❌ Goal 5 (1pt): Wrong shoes realization (not achieved)
+
+👤 WizardMaster99 - 7/15 points:
+⚠️ Goal 1 (2pts): Talking animal appears (similar to "phoenix grants three wishes")
+❌ Goal 2 (1pt): Crystal changes color with emotions (not achieved)
+⚠️ Goal 3 (2pts): Map leads to treasure (similar to "ancient map reveals location")
+⚠️ Goal 4 (2pts): Clock strikes important hour (similar to "bells chime at sunset")
+❌ Goal 5 (1pt): Someone loses their voice (not achieved)
+
+View detailed goal evaluations? (Y/N): _
+```
+
+#### Solo Mode Global Leaderboard
+```
+🏆 STORY COMPLETE! 🏆
+Final time: 10:00 | Total segments: 20
+
+🎯 YOUR COMPETITION SCORE: 11/15 points
+
+📊 GLOBAL LEADERBOARD RANKING:
+═══════════════════════════════════════════════════════════════
+
+Your Score: 11 points
+Global Rank: #847 out of 15,234 players
+
+🏆 TOP GLOBAL SCORES (All Time):
+1. StoryMaster_2024: 15/15 points (Perfect Score!)
+2. WordWizard42: 15/15 points 
+3. NarrativeNinja: 15/15 points
+4. PlotTwister99: 14/15 points
+5. TaleSpinner: 14/15 points
+
+📈 RECENT HIGH SCORES (Last 7 days):
+1. QuickWit_Sarah: 13/15 points
+2. StorySeeker: 12/15 points  
+3. CreativeKeith: 12/15 points
+4. Your Score: 11/15 points (#4 this week!)
+5. WordSmith_Anna: 11/15 points
+
+🎯 DIFFICULTY LEADERBOARD (Medium):
+Your Rank: #423 out of 8,891 Medium difficulty players
+Average Score: 8.7/15 points
+Your Score: 11/15 points (Above Average!)
+
+Percentile: 73rd percentile
+
+Upload score to global leaderboard? (Y/N): _
+```
+
+### 8. Enhanced Story Export with Authorship Analytics
 
 #### Comprehensive Markdown Output with Contribution Tracking
 ```markdown
@@ -606,8 +821,14 @@ Be as creative as you want - this will shape the entire story!
 - **Duration**: 10:00 minutes (20 segments)
 - **Seeding Phase**: 30 seconds (user-seeded story)
 - **Players**: 3 total
+- **Competition Mode**: Enabled (Medium difficulty, 5 goals per player)
 - **Generated**: August 23, 2025 at 2:47 PM
 - **Server**: localhost:3000
+
+## Competition Results
+- **Winner**: 🥇 MagicFan2024 (12/15 points)
+- **Runner-up**: 🥈 SaleemTheGreat (9/15 points)
+- **Third Place**: 🥉 WizardMaster99 (7/15 points)
 
 ## Initial Story Seed
 *Player-created story foundation*
@@ -622,6 +843,48 @@ Be as creative as you want - this will shape the entire story!
 *Generated in real-time segments with continuous player and AI collaboration*
 
 [Full story content with inline attribution markers...]
+
+---
+
+## Competition Mode Details
+
+### Individual Player Goals and Scores
+
+#### 🥇 MagicFan2024 - 12/15 points:
+- **Goal 1 (Score: 3/3)**: "A character finds a secret door behind a bookshelf"
+  - *AI Evaluation*: Exact match - Alex discovered hidden door behind bookshelf
+- **Goal 2 (Score: 3/3)**: "Someone mentions they've lived in this town for exactly 7 years"
+  - *AI Evaluation*: Exact match - Professor stated "seven years" precisely  
+- **Goal 3 (Score: 2/3)**: "A wise elder shares ancient knowledge"
+  - *AI Evaluation*: Similar - elderly woman gave cryptic advice, not exactly "ancient knowledge"
+- **Goal 4 (Score: 2/3)**: "Characters track mysterious footprints in the dirt"
+  - *AI Evaluation*: Similar - footprints in mud discovered, not specifically "mysterious"
+- **Goal 5 (Score: 2/3)**: "A character yearns for a distant place"
+  - *AI Evaluation*: Similar - homesickness expressed, not exactly "yearning for distant place"
+
+#### 🥈 SaleemTheGreat (Story Initiator) - 9/15 points:
+- **Goal 1 (Score: 3/3)**: "A character named Marcus finds a vintage radio that can only play songs from the 1940s"
+  - *AI Evaluation*: Exact match - Marcus found vintage radio playing 1940s music exclusively
+- **Goal 2 (Score: 2/3)**: "Someone discovers a hidden message inside the pages of an old cookbook"
+  - *AI Evaluation*: Similar - hidden note found in book, not specifically cookbook pages
+- **Goal 3 (Score: 1/3)**: "A magical creature offers to trade knowledge for exactly three golden coins"
+  - *AI Evaluation*: Not achieved - no magical trading scenario occurred
+- **Goal 4 (Score: 3/3)**: "The phrase 'clockwise until midnight' becomes important to solving a problem"
+  - *AI Evaluation*: Exact match - phrase used to solve final puzzle
+- **Goal 5 (Score: 0/3)**: "A character realizes they've been wearing someone else's shoes the entire time"
+  - *AI Evaluation*: Not achieved - shoe realization never occurred
+
+#### 🥉 WizardMaster99 - 7/15 points:
+- **Goal 1 (Score: 2/3)**: "A phoenix grants exactly three wishes to the protagonists"
+  - *AI Evaluation*: Similar - talking animal appeared, not specifically phoenix with wishes
+- **Goal 2 (Score: 1/3)**: "A crystal changes color based on the holder's emotions"
+  - *AI Evaluation*: Not achieved - no emotional color-changing crystal
+- **Goal 3 (Score: 2/3)**: "An ancient map reveals the location of a hidden treasure"
+  - *AI Evaluation*: Similar - map led to treasure, not specifically "ancient" map
+- **Goal 4 (Score: 2/3)**: "Church bells chime exactly when the sun sets"
+  - *AI Evaluation*: Similar - clock struck important hour, not sunset bells
+- **Goal 5 (Score: 0/3)**: "Someone loses their voice at a crucial moment"
+  - *AI Evaluation*: Not achieved - no voice loss scenario
 
 ---
 
@@ -812,6 +1075,8 @@ story-chef/
 │   │   ├── sessionManager.js (session persistence + performance)
 │   │   ├── storyEngine.js (LiteLLM + PDL integration)
 │   │   ├── aiQueue.js (AI request queuing and rate limiting)
+│   │   ├── competitionEngine.js (goal generation, scoring, leaderboards)
+│   │   ├── globalLeaderboard.js (persistent score tracking)
 │   │   ├── logger.js (server logging)
 │   │   └── ratingSystem.js (rating collection)
 │   ├── client/
@@ -819,6 +1084,7 @@ story-chef/
 │   │   ├── ui/
 │   │   │   ├── gameView.js
 │   │   │   ├── configPanel.js
+│   │   │   ├── competitionView.js (goals display, leaderboard)
 │   │   │   └── viewManager.js
 │   │   └── inputProcessor.js (input handling)
 │   ├── shared/
@@ -832,6 +1098,9 @@ story-chef/
 │   └── socket.io.min.js
 ├── prompts/
 │   └── story-prompts.pdl (PDL prompt templates)
+├── data/
+│   ├── leaderboards.db (global competition scores)
+│   └── [persistent session data]
 ├── logs/
 │   └── [server session logs]
 ├── exports/
@@ -851,23 +1120,27 @@ story-chef/
 - Single-player story seeding (30-second timer with ↓ skip)
 - AI story segment generation using PDL templates
 - Basic dual input modes (Direct Story vs Influence)
+- Competition mode: goal generation and basic scoring
+- Goals viewing interface (G key)
 - Contribution tracking system (word counts, input types)
 - Basic terminal UI with Shift+Tab view cycling
 - Simple story export with contribution analytics
 
-**Testing:** Can start server, connect client, seed a story, use both Direct and Influence input modes, generate AI segments that weave both input types, and export story with basic analytics.
+**Testing:** Can start server, connect client, seed a story, use both Direct and Influence input modes, generate competitive goals, view goals during gameplay, generate AI segments that weave both input types, and export story with basic analytics and competition results.
 
 ### Phase 2: Multiplayer & Controls
 **Testable Deliverables:**
 - Multiplayer sessions with game codes
 - Real-time dual-mode input synchronization (Direct/Influence)
+- Multiplayer competition mode with secret individual goals
 - Skip controls requiring unanimous agreement in multiplayer
 - Enhanced multi-view interface (Story/Direct/Influence/Live/Chat) with Shift+Tab cycling
 - Player join/leave notifications with contribution tracking
 - Live input view showing player input modes [DIRECT] vs [INFLUENCE]
+- Competition leaderboard display post-game
 - Basic disconnect/reconnect handling
 
-**Testing:** Multiple clients can join same session, use both input modes collaboratively, see each other's input types in real-time, skip segments together, and switch between all 5 views.
+**Testing:** Multiple clients can join same session, each receive secret goals, use both input modes collaboratively while pursuing individual objectives, see each other's input types in real-time, skip segments together, and view final competition results with leaderboard.
 
 ### Phase 3: Performance & Scalability
 **Testable Deliverables:**
@@ -890,28 +1163,34 @@ story-chef/
 
 **Testing:** Users can access full Story Chef experience through browser, collaborate with CLI users in real-time, and share session URLs for instant joining.
 
-### Phase 5: Advanced Analytics & Polish
+### Phase 5: Advanced Analytics & Competition
 **Testable Deliverables:**
+- Global leaderboard system with persistent score storage
+- Solo competition mode with global rankings and percentiles
+- Advanced AI goal scoring with detailed evaluation explanations
+- Difficulty-based leaderboard segmentation
 - Late join capability with story catch-up and contribution history
 - AI-generated author involvement summaries using PDL templates
 - Advanced contribution analytics (word counts, participation patterns, thematic analysis)
-- Enhanced exports with detailed authorship attribution and AI author summaries
+- Enhanced exports with detailed authorship attribution, AI author summaries, and competition results
 - Post-story rating system (1-5 stars + comments)
 - Server logging with IP addresses and detailed session tracking
 - Comprehensive error handling and recovery
 - Documentation and deployment guides
 
-**Testing:** Full end-to-end experience including real-time model switching, advanced analytics generation, AI author summaries, mid-session joins with contribution history, complete rating collection, and comprehensive story exports with detailed authorship analysis.
+**Testing:** Full end-to-end experience including global competition scoring, leaderboard uploads, difficulty-based rankings, real-time model switching, advanced analytics generation, AI author summaries, mid-session joins with contribution history, complete rating collection, and comprehensive story exports with detailed authorship and competition analysis.
 
 ## Key Features Summary
 
 ### Core Mechanics
 - **User Story Seeding**: Players create initial story foundation (30 seconds)
 - **Dual Input Modes**: Direct Story Writing & Influence Suggestions (Shift+Tab to switch)
+- **Competition Mode**: Secret goal-based competitive storytelling with AI scoring
 - **Segment-based Generation**: AI weaves both direct content and influences into 4-6 sentences every 30 seconds
 - **Skip Controls**: ↓ key to fast-forward (unanimous in multiplayer)
 - **Time-Limited Stories**: 10-minute maximum with automatic conclusion
 - **Enhanced Multi-view Interface**: Story/Direct/Influence/Live/Chat views (5 total for multiplayer)
+- **Goal Viewing**: G key to view secret competitive goals during gameplay
 - **Real-time Collaboration**: Players see each other's input modes in live view
 - **In-game Configuration**: C key opens config panel with live editing
 
@@ -922,11 +1201,21 @@ story-chef/
 - **Real-time Notifications**: Player join/leave alerts
 - **Session Persistence**: Maintains state across connections
 
+### Competition Features
+- **Secret Goals**: AI-generated specific objectives unique to each player
+- **Difficulty Levels**: Easy, Medium, Hard goal complexity settings
+- **AI Scoring**: Intelligent evaluation of goal achievement (1-3 points each)
+- **Multiplayer Leaderboards**: Post-game ranking with detailed breakdowns
+- **Global Leaderboards**: Persistent solo play rankings with percentiles
+- **Goal Privacy**: Individual goals kept secret during gameplay
+- **Fair Scoring**: Consistent AI evaluation with detailed explanations
+
 ### Post-Story Features
 - **Simplified Rating**: Single 1-5 star rating plus optional comments
-- **Comprehensive Export**: Story + influences + ratings + analytics
+- **Comprehensive Export**: Story + influences + ratings + analytics + competition results
 - **Session Analytics**: Detailed participation and engagement metrics
 - **Player Impact Tracking**: Individual contribution measurement
+- **Competition Results**: Goal achievement analysis and leaderboard placement
 
 ### Technical Features
 - **Client-Server Architecture**: Persistent server sessions with client connections
@@ -938,4 +1227,4 @@ story-chef/
 - **Export System**: Rich markdown output with complete session data
 - **Flexible Deployment**: Local or remote server connections
 
-This creates a complete, resilient client-server storytelling experience that scales from solo play to large group adventures, with user-driven story creation, flexible pacing controls, server persistence, and streamlined feedback collection.
+This creates a complete, resilient client-server storytelling experience that scales from solo play to large group adventures, with user-driven story creation, competitive goal-based gameplay, flexible pacing controls, server persistence, global leaderboards, and comprehensive analytics. The unique combination of collaborative storytelling with secret competitive objectives creates an engaging creative gaming experience that rewards both collaboration and individual strategic thinking.
