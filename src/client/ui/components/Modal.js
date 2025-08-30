@@ -197,10 +197,14 @@ class Modal {
   }
 
   destroy() {
-    this.dialog.removeAllListeners();
-    this.overlay.removeAllListeners();
-    if (this.overlay.parent) {
-      this.overlay.detach();
+    try {
+      this.dialog.removeAllListeners();
+      this.overlay.removeAllListeners();
+      if (this.overlay.parent) {
+        this.overlay.detach();
+      }
+    } catch (error) {
+      // Ignore errors during cleanup
     }
   }
 }

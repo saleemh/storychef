@@ -227,11 +227,6 @@ class TerminalUI extends EventEmitter {
       this.toggleInputMode();
     });
     
-    // Also capture tab on input bar
-    this.inputBar.getElement().key(['tab'], () => {
-      this.toggleInputMode();
-    });
-    
     // Shift+Tab: Cycle views (Phase 2 - show message for now)
     this.screen.key(['S-tab'], () => {
       this.cycleView();
@@ -393,10 +388,7 @@ class TerminalUI extends EventEmitter {
         this.uiState.setMessage(result.error, 'red');
       }
       
-      // Clear and refocus input
-      this.inputBar.clear();
-      this.inputBar.focus();
-      
+      // Input bar will handle its own clearing and refocusing
       return result;
     } catch (error) {
       this.uiState.setMessage(`Failed to submit: ${error.message}`, 'red');
@@ -646,9 +638,26 @@ class TerminalUI extends EventEmitter {
    * Cleanup resources
    */
   cleanup() {
-    this.uiState.destroy();
-    if (this.screen) {
-      this.screen.destroy();
+    try {
+      // Stop the UI state ticker first
+      if (this.uiState) {
+        this.uiState.destroy();
+      }
+      
+      // Destroy all modals
+      if (this.goalsModal) this.goalsModal.destroy();
+      if (this.helpModal) this.helpModal.destroy();
+      if (this.configModal) this.configModal.destroy();
+      
+      // Destroy input bar
+      if (this.inputBar) this.inputBar.destroy();
+      
+      // Finally destroy the screen
+      if (this.screen && !this.screen.destroyed) {
+        this.screen.destroy();
+      }
+    } catch (error) {
+      console.error('Error during UI cleanup:', error);
     }
   }
 
