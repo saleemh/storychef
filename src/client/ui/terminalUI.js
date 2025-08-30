@@ -1,27 +1,27 @@
 const blessed = require('blessed');
 const Utils = require('../../shared/utils');
+const UIState = require('./uiState');
+const StatusBar = require('./components/StatusBar');
+const StoryView = require('./components/StoryView');
+const InputBar = require('./components/InputBar');
+const Modal = require('./components/Modal');
 
 class TerminalUI {
-  constructor(client) {
+  constructor(client, inputProcessor) {
     this.client = client;
+    this.inputProcessor = inputProcessor;
     this.screen = null;
     this.views = ['story', 'direct', 'influence', 'live', 'chat'];
     this.currentView = 0;
-    this.competitionMode = false;
-    
-    // UI elements
-    this.storyBox = null;
-    this.inputBox = null;
+    this.uiState = new UIState();
+
+    // Components
+    this.storyView = null;
     this.statusBar = null;
-    this.goalsOverlay = null;
-    
-    // State
-    this.inputMode = 'influence'; // 'influence' or 'direct'
-    this.playerGoals = [];
-    this.storyText = '';
-    this.recentInputs = [];
-    this.lastMessage = null;
-    
+    this.inputBar = null;
+    this.goalsModal = null;
+    this.helpModal = null;
+
     this.setupScreen();
     this.setupEventHandlers();
   }
@@ -34,97 +34,70 @@ class TerminalUI {
       dockBorders: true
     });
 
+    // Ensure raw mode for clean input (prevents terminal echo/duplication)
+    try {
+      const inp = this.screen.program.input;
+      if (inp && typeof inp.setRawMode === 'function') {
+        inp.setRawMode(true);
+        inp.resume();
+      }
+    } catch (_) {
+      // best-effort; blessed should handle raw mode
+    }
+
     this.setupViews();
     this.setupKeyBindings();
     this.render();
   }
 
   setupViews() {
-    // Main story display box - top 70% of screen
-    this.storyBox = blessed.box({
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '70%',
-      border: { type: 'line' },
-      scrollable: true,
-      alwaysScroll: true,
-      tags: true,
-      label: ' Story View ',
-      style: {
-        border: { fg: 'cyan' },
-        focus: { border: { fg: 'green' } }
+    // Components
+    this.storyView = new StoryView();
+    this.statusBar = new StatusBar();
+    this.inputBar = new InputBar(
+      () => ({
+        modeText: this.inputProcessor.getInputModeDisplay(),
+        label: this.inputProcessor.getInputLabel()
+      }),
+      async (text) => {
+        const result = await this.inputProcessor.processInput(text);
+        if (result.success) {
+          const type = result.inputType.toUpperCase();
+          this.showMessage(`${type} input submitted`, 'green');
+        } else {
+          this.showMessage(`Failed to submit: ${result.error}`, 'red');
+        }
+        this.render();
       }
-    });
+    );
+    this.goalsModal = new Modal(' YOUR SECRET GOALS ', 80, 20);
+    this.helpModal = new Modal(' HELP ', 60, 25);
 
-    // Status bar - fixed 3 lines height
-    this.statusBar = blessed.box({
-      top: '70%',
-      left: 0,
-      width: '100%',
-      height: 3,
-      border: { type: 'line' },
-      tags: true,
-      label: ' Status ',
-      style: {
-        border: { fg: 'yellow' }
-      }
-    });
+    // Append to screen
+    this.screen.append(this.storyView.getElement());
+    this.screen.append(this.statusBar.getElement());
+    this.screen.append(this.inputBar.getElement());
+    this.screen.append(this.goalsModal.getElement());
+    this.screen.append(this.helpModal.getElement());
 
-    // Input box - try textarea for better input handling
-    this.inputBox = blessed.textarea({
-      top: '70%+3',
-      left: 0,
-      width: '100%',
-      height: 5,
-      border: { type: 'line' },
-      keys: true,
-      mouse: true,
-      label: ` [${this.inputMode.toUpperCase()} MODE] Type your ${this.inputMode} `,
-      style: {
-        border: { fg: 'magenta' },
-        focus: { border: { fg: 'green' } }
-      }
-    });
+    // Focus input
+    this.inputBar.clear?.();
+    this.inputBar.focus();
 
-    // Competition goals overlay (hidden by default)
-    this.goalsOverlay = blessed.box({
-      top: 'center',
-      left: 'center',
-      width: 80,
-      height: 20,
-      border: { type: 'line' },
-      hidden: true,
-      tags: true,
-      label: ' YOUR SECRET GOALS ',
-      style: {
-        border: { fg: 'red' },
-        bg: 'black'
-      },
-      scrollable: true
-    });
-
-    // Add elements to screen
-    this.screen.append(this.storyBox);
-    this.screen.append(this.statusBar);
-    this.screen.append(this.inputBox);
-    this.screen.append(this.goalsOverlay);
-
-    // Focus input box initially and ensure it's empty
-    this.inputBox.clearValue();
-    this.inputBox.focus();
+    // UI State listeners
+    this.uiState.on('change', () => this.render());
+    this.uiState.on('tick', () => this.render());
+    this.uiState.startTicker();
   }
 
   setupKeyBindings() {
-    // Shift+Tab: Cycle views (Phase 2 feature, placeholder for now)
-    this.screen.key(['S-tab'], () => {
-      this.cycleView();
-    });
+    // Shift+Tab: Cycle views (Phase 2 placeholder)
+    this.screen.key(['S-tab'], () => this.cycleView());
 
     // G: Show goals (competition mode)
     this.screen.key(['g'], () => {
-      if (this.competitionMode) {
-        this.toggleGoalsView();
+      if (this.uiState.session?.competitionMode) {
+        this.showGoals();
       }
     });
 
@@ -139,26 +112,17 @@ class TerminalUI {
     });
 
     // Tab: Switch input modes (Direct/Influence)
-    this.screen.key(['tab'], () => {
-      this.toggleInputMode();
-    });
+    this.screen.key(['tab'], () => this.toggleInputMode());
+    // Also capture Tab while textbox focused
+    this.inputBar.getElement().key(['tab'], () => this.toggleInputMode());
 
     // Removed problematic keypress listener that was causing duplicate characters
 
     // ESC/Ctrl+C: Exit
-    this.screen.key(['escape', 'C-c'], () => {
-      this.shutdown();
-    });
-
-    // Enter in input box: Submit input
-    this.inputBox.key(['enter'], () => {
-      this.submitCurrentInput();
-    });
+    this.screen.key(['escape', 'C-c'], () => this.shutdown());
 
     // Help
-    this.screen.key(['?'], () => {
-      this.showHelp();
-    });
+    this.screen.key(['?'], () => this.showHelp());
   }
 
   setupEventHandlers() {
@@ -201,11 +165,11 @@ class TerminalUI {
     // Story events
     this.client.on('story_started', () => {
       this.showMessage('📖 Story generation has begun!', 'green');
-      this.updateLabel();
+      this.updateLabels();
     });
 
     this.client.on('story_segment', (data) => {
-      this.addStorySegment(data.segment);
+      this.uiState.addStorySegment(data.segment);
     });
 
     this.client.on('story_complete', (data) => {
@@ -214,20 +178,34 @@ class TerminalUI {
 
     // Input events
     this.client.on('seed_added', (data) => {
-      this.addRecentInput(`${data.playerName} [SEED]: ${data.content}`);
+      this.uiState.addRecentInput(`${data.playerName || 'Player'} [SEED]: ${data.content}`);
     });
 
     this.client.on('direct_input_added', (data) => {
-      this.addRecentInput(`${data.playerName} [DIRECT]: ${data.content}`);
+      this.uiState.addRecentInput(`${data.playerName || 'Player'} [DIRECT]: ${data.content}`);
     });
 
     this.client.on('influence_input_added', (data) => {
-      this.addRecentInput(`${data.playerName} [INFLUENCE]: ${data.content}`);
+      this.uiState.addRecentInput(`${data.playerName || 'Player'} [INFLUENCE]: ${data.content}`);
     });
 
     // Error handling
     this.client.on('error', (error) => {
       this.showMessage(`❌ Error: ${error.message}`, 'red');
+    });
+
+    // Local submit confirmations (reflect own inputs immediately)
+    this.client.on('seed_submitted', ({ content }) => {
+      const name = this.client.getPlayerName() || 'You';
+      this.uiState.addRecentInput(`${name} [SEED]: ${content}`);
+    });
+    this.client.on('direct_input_submitted', ({ content }) => {
+      const name = this.client.getPlayerName() || 'You';
+      this.uiState.addRecentInput(`${name} [DIRECT]: ${content}`);
+    });
+    this.client.on('influence_input_submitted', ({ content }) => {
+      const name = this.client.getPlayerName() || 'You';
+      this.uiState.addRecentInput(`${name} [INFLUENCE]: ${content}`);
     });
   }
 
@@ -238,63 +216,46 @@ class TerminalUI {
   }
 
   toggleInputMode() {
-    this.inputMode = this.inputMode === 'influence' ? 'direct' : 'influence';
-    this.updateLabel();
-    this.showMessage(`Switched to ${this.inputMode.toUpperCase()} mode`, 'cyan');
-    // Ensure input box has focus after mode switch
-    this.inputBox.focus();
+    const toggle = this.inputProcessor.toggleInputMode();
+    this.uiState.setInputMode(toggle.currentMode);
+    this.updateLabels();
+    this.showMessage(`Switched to ${toggle.currentMode.toUpperCase()} mode`, 'cyan');
+    this.inputBar.focus();
   }
 
-  updateLabel() {
-    const session = this.client.getSession();
-    let modeText = this.inputMode.toUpperCase();
-    
-    if (session?.storyState.seedingPhase) {
-      modeText = 'SEEDING';
-    }
-    
-    this.inputBox.setLabel(` [${modeText} MODE] Type your ${session?.storyState.seedingPhase ? 'story seed' : this.inputMode} `);
-    this.inputBox.focus();
+  updateLabels() {
+    // Trigger InputBar to re-render with updated labels
     this.render();
   }
 
   // Goals management (competition mode)
-  toggleGoalsView() {
-    if (this.goalsOverlay.hidden) {
-      this.showGoals();
-    } else {
-      this.hideGoals();
-    }
-  }
-
   showGoals() {
-    if (this.playerGoals.length === 0) {
-      this.goalsOverlay.setContent('\n  {center}No goals assigned yet{/center}');
+    let content = '\n  Your secret goals:\n\n';
+    const goals = this.uiState.playerGoals || [];
+    if (goals.length === 0) {
+      content += '  {center}No goals assigned yet{/center}\n';
     } else {
-      let content = '\n  Your secret goals:\n\n';
-      this.playerGoals.forEach((goal, index) => {
+      goals.forEach((goal, index) => {
         const status = goal.achieved ? '✅' : '❓';
-        content += `  ${status} Goal ${index + 1}: ${goal.text}\n`;
+        const text = goal.text || String(goal);
+        content += `  ${status} Goal ${index + 1}: ${text}\n`;
       });
-      content += '\n  Press any key to return to story...';
-      this.goalsOverlay.setContent(content);
     }
-    
-    this.goalsOverlay.show();
-    this.goalsOverlay.focus();
-    this.render();
+    content += '\n  Press any key to return to story...';
+    this.goalsModal.show(content);
 
-    // Hide on any key press
     const hideHandler = () => {
-      this.hideGoals();
-      this.goalsOverlay.removeListener('keypress', hideHandler);
+      this.goalsModal.hide();
+      this.inputBar.focus();
+      this.screen.render();
+      this.goalsModal.getElement().removeListener('keypress', hideHandler);
     };
-    this.goalsOverlay.on('keypress', hideHandler);
+    this.goalsModal.getElement().on('keypress', hideHandler);
   }
 
   hideGoals() {
-    this.goalsOverlay.hide();
-    this.inputBox.focus();
+    this.goalsModal.hide();
+    this.inputBar.focus();
     this.render();
   }
 
@@ -305,87 +266,19 @@ class TerminalUI {
     this.showMessage(`📖 New story segment generated`, 'green');
   }
 
-  updateStoryDisplay() {
-    const session = this.client.getSession();
-    let content = '';
-
-    // Add title if available
-    if (session?.sessionId) {
-      content += `{center}{bold}${session.sessionId}{/bold}{/center}\n\n`;
-    }
-
-    // Add story content
-    if (this.storyText) {
-      content += this.storyText;
-    } else if (session?.storyState.seedingPhase) {
-      content += '{center}📝 STORY SEEDING PHASE 📝{/center}\n\n';
-      content += 'Waiting for players to seed the story...\n';
-    } else {
-      content += '{center}🌟 Welcome to Story Chef! 🌟{/center}\n\n';
-      content += 'Create or join a session to begin your collaborative story adventure.\n';
-    }
-
-    // Add recent inputs section
-    if (this.recentInputs.length > 0) {
-      content += '\n\n{bold}Recent Player Inputs:{/bold}\n';
-      this.recentInputs.slice(-5).forEach(input => {
-        content += `${input}\n`;
-      });
-    }
-
-    this.storyBox.setContent(content);
-    this.storyBox.scrollTo(this.storyBox.getScrollHeight());
-    this.render();
-  }
-
   addRecentInput(inputText) {
-    this.recentInputs.push(inputText);
-    if (this.recentInputs.length > 10) {
-      this.recentInputs = this.recentInputs.slice(-10);
-    }
-    this.updateStoryDisplay();
+    this.uiState.addRecentInput(inputText);
   }
 
   // Status bar updates
   updateStatus() {
-    const session = this.client.getSession();
-    let statusText = '';
-
-    if (session) {
-      const playerCount = session.players.filter(p => p.isConnected).length;
-      const timeRemaining = session.storyState.timeRemaining;
-      
-      statusText += `[⏰ ${Utils.formatTime(timeRemaining)}] `;
-      statusText += `| 👥 ${playerCount} `;
-      
-      if (session.storyState.seedingPhase) {
-        statusText += '| 📝 Seeding Phase';
-      } else if (session.storyState.isActive) {
-        statusText += '| 📖 Story Active';
-      } else if (session.storyState.isCompleted) {
-        statusText += '| ✅ Story Complete';
-      }
-
-      if (session.competitionMode) {
-        statusText += ' | 🏆 Competition Mode';
-      }
-    } else {
-      statusText = 'Not connected to a session';
-    }
-
-    // Add last message to status if available
-    if (this.lastMessage) {
-      statusText += `\n{dim}[${this.lastMessage.timestamp}]{/dim} ${this.lastMessage.text}`;
-    }
-
-    this.statusBar.setContent(`  ${statusText}`);
+    this.statusBar.render(this.uiState);
   }
 
   updateSessionInfo(session) {
-    this.competitionMode = session.competitionMode || false;
+    this.uiState.setSession(session);
     this.updateStatus();
-    this.updateStoryDisplay();
-    this.updateLabel();
+    this.render();
   }
 
   // Input handling
@@ -420,15 +313,7 @@ class TerminalUI {
 
   // UI utilities
   showMessage(message, color = 'white') {
-    const timestamp = new Date().toLocaleTimeString();
-    const coloredMessage = color === 'white' ? message : `{${color}-fg}${message}{/}`;
-    
-    // Store the last message to show with status
-    this.lastMessage = {
-      text: coloredMessage,
-      timestamp: timestamp
-    };
-    
+    this.uiState.setMessage(message, color);
     this.updateStatus();
     this.render();
   }
@@ -462,36 +347,20 @@ class TerminalUI {
 Press any key to return...
 `;
 
-    const helpBox = blessed.box({
-      top: 'center',
-      left: 'center',
-      width: 60,
-      height: 25,
-      border: { type: 'line' },
-      tags: true,
-      content: helpText,
-      style: {
-        border: { fg: 'blue' },
-        bg: 'black'
-      }
-    });
-
-    this.screen.append(helpBox);
-    helpBox.focus();
-    this.render();
-
+    this.helpModal.show(helpText);
     const hideHelp = () => {
-      this.screen.remove(helpBox);
-      this.inputBox.focus();
+      this.helpModal.hide();
+      this.inputBar.focus();
       this.render();
-      helpBox.removeListener('keypress', hideHelp);
+      this.helpModal.getElement().removeListener('keypress', hideHelp);
     };
-    
-    helpBox.on('keypress', hideHelp);
+    this.helpModal.getElement().on('keypress', hideHelp);
   }
 
   render() {
-    this.updateStatus();
+    this.statusBar.render(this.uiState);
+    this.storyView.render(this.uiState);
+    this.inputBar.render(this.uiState);
     this.screen.render();
   }
 
@@ -505,16 +374,16 @@ Press any key to return...
   displayWelcome() {
     this.showMessage('🌟 Welcome to Story Chef! 🌟', 'cyan');
     this.showMessage('Create a new session or join existing one with a game code.', 'white');
-    this.updateStoryDisplay();
+    this.render();
   }
 
   setPlayerGoals(goals) {
-    this.playerGoals = goals;
+    this.uiState.setGoals(goals);
     this.showMessage(`🎯 ${goals.length} secret goals assigned`, 'magenta');
   }
 
   focusInput() {
-    this.inputBox.focus();
+    this.inputBar.focus();
     this.render();
   }
 }
