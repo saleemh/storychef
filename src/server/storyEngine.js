@@ -224,6 +224,7 @@ class StoryEngine extends EventEmitter {
   }
 
   async generateStorySegment(session, segmentNumber) {
+    const sessionId = session.sessionId; // Get sessionId from session
     const hasDirectInputs = session.pendingInputs.direct.length > 0;
     const template = hasDirectInputs ? 'story_segment_with_direct' : 'story_segment_generation';
     

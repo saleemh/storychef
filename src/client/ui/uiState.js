@@ -235,6 +235,11 @@ class UIState extends EventEmitter {
     return player?.isHost || false;
   }
 
+  getHostPlayer() {
+    if (!this.session?.players) return null;
+    return this.session.players.find(p => p.isHost) || null;
+  }
+
   // Cleanup
   reset() {
     this.stopTicker();
