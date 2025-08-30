@@ -30,8 +30,12 @@ class TerminalUI {
     this.screen = blessed.screen({
       smartCSR: true,
       title: 'Story Chef',
-      fullUnicode: true,
-      dockBorders: true
+      // Disable fullUnicode to avoid width mis-detection/duplication on some terminals
+      fullUnicode: false,
+      dockBorders: true,
+      terminal: process.env.TERM || 'xterm-256color',
+      useBCE: true,
+      sendFocus: true
     });
 
     // Ensure raw mode for clean input (prevents terminal echo/duplication)
