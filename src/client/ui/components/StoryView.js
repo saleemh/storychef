@@ -165,8 +165,8 @@ class StoryView {
       const typeColor = this.getInputTypeColor(inputType);
       const timeStr = this.formatTimestamp(timestamp);
       
-      // Format: [influence] samoda-mac 4:35pm: content
-      return `{${typeColor}-fg}[${inputType.toLowerCase()}]{/${typeColor}-fg} {cyan-fg}${playerName.toLowerCase()}{/cyan-fg} {gray-fg}${timeStr}{/gray-fg}: ${content}`;
+      // Format: 4:35pm [influence] samoda-mac: content
+      return `{gray-fg}${timeStr}{/gray-fg} {${typeColor}-fg}[${inputType.toLowerCase()}]{/${typeColor}-fg} {cyan-fg}${playerName.toLowerCase()}{/cyan-fg}: ${content}`;
     }
     
     // Fallback for non-standard format
