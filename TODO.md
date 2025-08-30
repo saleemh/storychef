@@ -120,3 +120,35 @@ story-chef/
 - ✅ = Completed
 - 🔄 = In Progress  
 - 📋 = Pending
+
+---
+
+## Addendum: Phase 1 UI Reimplementation (Modular) – Completed ✅
+
+Date: 2025-08-30
+
+Summary: Rebuilt the terminal UI per Phase 1 design into a modular, reliable architecture using Blessed, improving input handling, rendering stability, and state management while preserving keybindings and features.
+
+Completed tasks:
+- Refactor UI to modular components (Blessed):
+  - Added `src/client/ui/components/StoryView.js` (story + recent inputs)
+  - Added `src/client/ui/components/StatusBar.js` (time, players, phase, last message)
+  - Added `src/client/ui/components/InputBar.js` (single-line textbox; proper submit)
+  - Added `src/client/ui/components/Modal.js` (reusable modal for Help/Goals)
+- Centralized UI state and ticker:
+  - Added `src/client/ui/uiState.js` (session snapshot, story text, inputs, goals, messages)
+  - Implemented 1s local countdown ticker synced from `session_update.timeRemaining`
+- Rewrote `src/client/ui/terminalUI.js` to use components and state store
+  - Routed all input through `InputProcessor` for validation and mode handling
+  - Reliable key handling: Tab (mode toggle), G (goals), Down (skip placeholder), ? (help), ESC/Ctrl+C
+  - Modal overlays for goals and help with clean focus and dismiss behavior
+- Improved input reliability
+  - Replaced textarea enter-handling with `blessed.textbox` submit flow
+  - Eliminated double-render/focus churn; render now component-driven
+- Updated CLI wiring to pass `InputProcessor` to TerminalUI
+  - Modified `src/cli.js` for `start`, `create`, `join` commands
+
+Follow-ups (Pending in later phases):
+- Server event `goals_assigned` to populate goals automatically (UI supports `setPlayerGoals`)
+- Implement skip coordination on server and broadcast status to clients
+- Configuration panel (C) and multi-view cycling (Shift+Tab) per planning.md Phase 2/3
