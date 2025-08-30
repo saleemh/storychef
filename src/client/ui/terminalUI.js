@@ -1,328 +1,579 @@
 const blessed = require('blessed');
-const Utils = require('../../shared/utils');
+const EventEmitter = require('events');
 const UIState = require('./uiState');
 const StatusBar = require('./components/StatusBar');
 const StoryView = require('./components/StoryView');
 const InputBar = require('./components/InputBar');
 const Modal = require('./components/Modal');
 
-class TerminalUI {
+/**
+ * TerminalUI - Main terminal interface orchestrator
+ * 
+ * Implements the complete terminal UI for StoryChef following planning.md design:
+ * - Multi-view interface (Story/Direct/Influence/Live/Chat)
+ * - Dual input modes (Direct/Influence)
+ * - Competition mode with goals
+ * - Real-time multiplayer support
+ */
+class TerminalUI extends EventEmitter {
   constructor(client, inputProcessor) {
+    super();
+    
     this.client = client;
     this.inputProcessor = inputProcessor;
+    
+    // UI components and state
     this.screen = null;
-    this.views = ['story', 'direct', 'influence', 'live', 'chat'];
-    this.currentView = 0;
     this.uiState = new UIState();
-
-    // Components
-    this.storyView = null;
+    
+    // Views tracking
+    this.views = ['story', 'direct', 'influence', 'live', 'chat'];
+    this.currentViewIndex = 0;
+    
+    // Component references
     this.statusBar = null;
+    this.storyView = null;
     this.inputBar = null;
+    this.directView = null;
+    this.influenceView = null;
+    this.liveView = null;
+    this.chatView = null;
+    
+    // Modals
     this.goalsModal = null;
     this.helpModal = null;
-
+    this.configModal = null;
+    
+    // Initialize UI
     this.setupScreen();
+    this.setupComponents();
+    this.setupKeyBindings();
     this.setupEventHandlers();
+    
+    // Start UI state ticker for countdown
+    this.uiState.startTicker();
   }
 
+  /**
+   * Create and configure the blessed screen
+   */
   setupScreen() {
     this.screen = blessed.screen({
       smartCSR: true,
       title: 'Story Chef',
-      // Disable fullUnicode to avoid width mis-detection/duplication on some terminals
       fullUnicode: false,
       dockBorders: true,
       terminal: process.env.TERM || 'xterm-256color',
       useBCE: true,
-      sendFocus: true
+      sendFocus: true,
+      warnings: true
     });
 
-    // Ensure raw mode for clean input (prevents terminal echo/duplication)
-    try {
-      if (this.screen.program && typeof this.screen.program.setRawMode === 'function') {
-        this.screen.program.setRawMode(true);
-      }
-      const inp = this.screen.program.input || process.stdin;
-      if (inp && typeof inp.setRawMode === 'function') inp.setRawMode(true);
-      if (inp && typeof inp.resume === 'function') inp.resume();
-    } catch (_) {
-      // best-effort; blessed should handle raw mode
-    }
-
-    this.setupViews();
-    this.setupKeyBindings();
-    this.render();
+    // Ensure proper input handling
+    this.screen.enableInput();
+    
+    // Set up clean exit handling
+    this.screen.on('destroy', () => {
+      this.cleanup();
+    });
   }
 
-  setupViews() {
-    // Components
-    this.storyView = new StoryView();
+  /**
+   * Create all UI components
+   */
+  setupComponents() {
+    // Status bar at top
     this.statusBar = new StatusBar();
+    
+    // Main content views (only one visible at a time)
+    this.storyView = new StoryView();
+    this.directView = this.createDirectView();
+    this.influenceView = this.createInfluenceView();
+    this.liveView = this.createLiveView();
+    this.chatView = this.createChatView();
+    
+    // Input bar at bottom
     this.inputBar = new InputBar(
-      () => ({
-        modeText: this.inputProcessor.getInputModeDisplay(),
-        label: this.inputProcessor.getInputLabel()
-      }),
-      async (text) => {
-        const result = await this.inputProcessor.processInput(text);
-        if (result.success) {
-          const type = result.inputType.toUpperCase();
-          this.showMessage(`${type} input submitted`, 'green');
-        } else {
-          this.showMessage(`Failed to submit: ${result.error}`, 'red');
-        }
-        this.render();
-      }
+      (uiState) => this.getInputLabels(uiState),
+      async (text) => await this.handleInputSubmit(text)
     );
-    this.goalsModal = new Modal(' YOUR SECRET GOALS ', 80, 20);
-    this.helpModal = new Modal(' HELP ', 60, 25);
-
-    // Append to screen
-    this.screen.append(this.storyView.getElement());
+    
+    // Modals
+    this.goalsModal = new Modal(' YOUR SECRET GOALS ', 80, 25);
+    this.helpModal = new Modal(' HELP ', 70, 30);
+    this.configModal = new Modal(' CONFIGURATION ', 80, 25);
+    
+    // Add components to screen
     this.screen.append(this.statusBar.getElement());
+    this.screen.append(this.storyView.getElement());
+    this.screen.append(this.directView);
+    this.screen.append(this.influenceView);
+    this.screen.append(this.liveView);
+    this.screen.append(this.chatView);
     this.screen.append(this.inputBar.getElement());
     this.screen.append(this.goalsModal.getElement());
     this.screen.append(this.helpModal.getElement());
-
-    // Focus input
-    this.inputBar.clear?.();
+    this.screen.append(this.configModal.getElement());
+    
+    // Show only the current view
+    this.showCurrentView();
+    
+    // Focus on input
     this.inputBar.focus();
-
-    // UI State listeners
+    
+    // Listen to UI state changes
     this.uiState.on('change', () => this.render());
     this.uiState.on('tick', () => this.render());
-    this.uiState.startTicker();
   }
 
-  setupKeyBindings() {
-    // Shift+Tab: Cycle views (Phase 2 placeholder)
-    this.screen.key(['S-tab'], () => this.cycleView());
+  /**
+   * Create the Direct input view (Phase 2 feature)
+   */
+  createDirectView() {
+    const view = blessed.box({
+      top: 3,
+      left: 0,
+      width: '100%',
+      height: '70%',
+      border: { type: 'line' },
+      label: ' ✍️ DIRECT STORY INPUT ',
+      hidden: true,
+      scrollable: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      tags: true,
+      padding: { left: 1, right: 1 }
+    });
+    
+    return view;
+  }
 
+  /**
+   * Create the Influence input view (Phase 2 feature)
+   */
+  createInfluenceView() {
+    const view = blessed.box({
+      top: 3,
+      left: 0,
+      width: '100%',
+      height: '70%',
+      border: { type: 'line' },
+      label: ' 💭 INFLUENCE INPUT ',
+      hidden: true,
+      scrollable: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      tags: true,
+      padding: { left: 1, right: 1 }
+    });
+    
+    return view;
+  }
+
+  /**
+   * Create the Live input view for multiplayer (Phase 2 feature)
+   */
+  createLiveView() {
+    const view = blessed.box({
+      top: 3,
+      left: 0,
+      width: '100%',
+      height: '70%',
+      border: { type: 'line' },
+      label: ' 📝 LIVE INPUT VIEW ',
+      hidden: true,
+      scrollable: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      tags: true,
+      padding: { left: 1, right: 1 }
+    });
+    
+    return view;
+  }
+
+  /**
+   * Create the Chat view for multiplayer (Phase 2 feature)
+   */
+  createChatView() {
+    const view = blessed.box({
+      top: 3,
+      left: 0,
+      width: '100%',
+      height: '70%',
+      border: { type: 'line' },
+      label: ' 💬 CHAT VIEW ',
+      hidden: true,
+      scrollable: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      tags: true,
+      padding: { left: 1, right: 1 }
+    });
+    
+    return view;
+  }
+
+  /**
+   * Set up all keyboard shortcuts
+   */
+  setupKeyBindings() {
+    // Tab: Switch input modes (Direct/Influence)
+    this.screen.key(['tab'], () => {
+      this.toggleInputMode();
+    });
+    
+    // Also capture tab on input bar
+    this.inputBar.getElement().key(['tab'], () => {
+      this.toggleInputMode();
+    });
+    
+    // Shift+Tab: Cycle views (Phase 2 - show message for now)
+    this.screen.key(['S-tab'], () => {
+      this.cycleView();
+    });
+    
     // G: Show goals (competition mode)
-    this.screen.key(['g'], () => {
-      if (this.uiState.session?.competitionMode) {
+    this.screen.key(['g', 'G'], () => {
+      if (this.uiState.getSession()?.competitionMode) {
         this.showGoals();
       }
     });
-
-    // Down Arrow: Skip wait (will integrate with server later)
+    
+    // Down arrow: Skip wait
     this.screen.key(['down'], () => {
       this.requestSkip();
     });
-
-    // C: Configuration panel (placeholder for Phase 3)
-    this.screen.key(['c'], () => {
-      this.showMessage('Configuration panel will be available in Phase 3');
+    
+    // C: Configuration panel (Phase 3 - show message for now)
+    this.screen.key(['c', 'C'], () => {
+      this.showConfig();
     });
-
-    // Tab: Switch input modes (Direct/Influence)
-    this.screen.key(['tab'], () => this.toggleInputMode());
-    // Also capture Tab while textbox focused
-    this.inputBar.getElement().key(['tab'], () => this.toggleInputMode());
-
-    // Removed problematic keypress listener that was causing duplicate characters
-
+    
+    // ?: Show help
+    this.screen.key(['?'], () => {
+      this.showHelp();
+    });
+    
     // ESC/Ctrl+C: Exit
-    this.screen.key(['escape', 'C-c'], () => this.shutdown());
-
-    // Help
-    this.screen.key(['?'], () => this.showHelp());
+    this.screen.key(['escape', 'C-c'], () => {
+      this.shutdown();
+    });
   }
 
+  /**
+   * Set up event handlers for client events
+   */
   setupEventHandlers() {
-    // Client connection events
+    // Connection events
     this.client.on('connected', () => {
-      this.showMessage('✅ Connected to Story Chef Server', 'green');
+      this.uiState.setMessage('✅ Connected to Story Chef Server', 'green');
     });
-
+    
     this.client.on('connection_error', (error) => {
-      this.showMessage(`❌ Connection failed: ${error.message}`, 'red');
+      this.uiState.setMessage(`❌ Connection failed: ${error.message}`, 'red');
     });
-
+    
     this.client.on('disconnected', (reason) => {
-      this.showMessage(`🔴 Disconnected: ${reason}`, 'yellow');
+      this.uiState.setMessage(`🔴 Disconnected: ${reason}`, 'yellow');
     });
-
+    
     // Session events
     this.client.on('session_created', (data) => {
-      this.showMessage(`🎮 Session created: ${data.sessionId}`, 'green');
-      this.updateSessionInfo(data.session);
+      this.uiState.setSession(data.session);
+      this.uiState.setPlayerInfo(data.playerId, this.client.getPlayerName());
+      this.uiState.setMessage(`🎮 Session created: ${data.sessionId}`, 'green');
     });
-
+    
     this.client.on('session_joined', (data) => {
-      this.showMessage(`🎮 Joined session: ${data.sessionId}`, 'green');
-      this.updateSessionInfo(data.session);
+      this.uiState.setSession(data.session);
+      this.uiState.setPlayerInfo(data.playerId, this.client.getPlayerName());
+      this.uiState.setMessage(`🎮 Joined session: ${data.sessionId}`, 'green');
     });
-
+    
     this.client.on('session_updated', (session) => {
-      this.updateSessionInfo(session);
+      this.uiState.setSession(session);
     });
-
+    
+    // Player events
     this.client.on('player_joined', (data) => {
-      this.showMessage(`👤 ${data.playerName} joined the story`, 'cyan');
+      this.uiState.setMessage(`👤 ${data.playerName} joined the story`, 'cyan');
     });
-
+    
     this.client.on('player_left', (data) => {
-      this.showMessage(`👤 ${data.playerName} left the story`, 'yellow');
+      this.uiState.setMessage(`👤 ${data.playerName} left the story`, 'yellow');
     });
-
+    
     // Story events
     this.client.on('story_started', () => {
-      this.showMessage('📖 Story generation has begun!', 'green');
-      this.updateLabels();
+      this.uiState.setMessage('📖 Story generation has begun!', 'green');
     });
-
+    
     this.client.on('story_segment', (data) => {
       this.uiState.addStorySegment(data.segment);
+      // No message for segments - they show in the story view
     });
-
+    
     this.client.on('story_complete', (data) => {
-      this.showMessage(`🎉 Story complete! Duration: ${Utils.formatTime(data.duration * 1000)}`, 'green');
+      this.uiState.setMessage(`🎉 Story complete! Duration: ${data.duration}`, 'green');
     });
-
-    // Input events
+    
+    // Input events - both from server (other players) and local confirmations
     this.client.on('seed_added', (data) => {
-      this.uiState.addRecentInput(`${data.playerName || 'Player'} [SEED]: ${data.content}`);
+      if (data.playerName) {
+        this.uiState.addRecentInput(`${data.playerName} [SEED]: ${data.content}`);
+      }
     });
-
+    
     this.client.on('direct_input_added', (data) => {
-      this.uiState.addRecentInput(`${data.playerName || 'Player'} [DIRECT]: ${data.content}`);
+      if (data.playerName) {
+        this.uiState.addRecentInput(`${data.playerName} [DIRECT]: ${data.content}`);
+      }
     });
-
+    
     this.client.on('influence_input_added', (data) => {
-      this.uiState.addRecentInput(`${data.playerName || 'Player'} [INFLUENCE]: ${data.content}`);
+      if (data.playerName) {
+        this.uiState.addRecentInput(`${data.playerName} [INFLUENCE]: ${data.content}`);
+      }
     });
-
-    // Error handling
-    this.client.on('error', (error) => {
-      this.showMessage(`❌ Error: ${error.message}`, 'red');
-    });
-
-    // Local submit confirmations (reflect own inputs immediately)
+    
+    // Local input confirmations
     this.client.on('seed_submitted', ({ content }) => {
       const name = this.client.getPlayerName() || 'You';
       this.uiState.addRecentInput(`${name} [SEED]: ${content}`);
     });
+    
     this.client.on('direct_input_submitted', ({ content }) => {
       const name = this.client.getPlayerName() || 'You';
       this.uiState.addRecentInput(`${name} [DIRECT]: ${content}`);
     });
+    
     this.client.on('influence_input_submitted', ({ content }) => {
       const name = this.client.getPlayerName() || 'You';
       this.uiState.addRecentInput(`${name} [INFLUENCE]: ${content}`);
     });
+    
+    // Competition events
+    this.client.on('goals_assigned', (goals) => {
+      this.uiState.setGoals(goals);
+      this.uiState.setMessage(`🎯 ${goals.length} secret goals assigned`, 'magenta');
+    });
+    
+    // Error events
+    this.client.on('error', (error) => {
+      this.uiState.setMessage(`❌ Error: ${error.message}`, 'red');
+    });
   }
 
-  // View management
-  cycleView() {
-    // Placeholder for Phase 2 multi-view implementation
-    this.showMessage('Multi-view interface will be available in Phase 2');
+  /**
+   * Get input labels based on current state
+   */
+  getInputLabels(uiState) {
+    const mode = this.inputProcessor.getInputModeDisplay();
+    const label = this.inputProcessor.getInputLabel();
+    
+    return {
+      modeText: mode,
+      label: label
+    };
   }
 
+  /**
+   * Handle input submission
+   */
+  async handleInputSubmit(text) {
+    try {
+      const result = await this.inputProcessor.processInput(text);
+      
+      if (!result.success && result.error) {
+        this.uiState.setMessage(result.error, 'red');
+      }
+      
+      // Clear and refocus input
+      this.inputBar.clear();
+      this.inputBar.focus();
+      
+      return result;
+    } catch (error) {
+      this.uiState.setMessage(`Failed to submit: ${error.message}`, 'red');
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Toggle between Direct and Influence input modes
+   */
   toggleInputMode() {
-    const toggle = this.inputProcessor.toggleInputMode();
-    this.uiState.setInputMode(toggle.currentMode);
-    this.updateLabels();
-    this.showMessage(`Switched to ${toggle.currentMode.toUpperCase()} mode`, 'cyan');
+    const result = this.inputProcessor.toggleInputMode();
+    this.uiState.setInputMode(result.currentMode);
+    this.uiState.setMessage(`Switched to ${result.currentMode.toUpperCase()} mode`, 'cyan');
+    
+    // Ensure input stays focused
     this.inputBar.focus();
   }
 
-  updateLabels() {
-    // Trigger InputBar to re-render with updated labels
+  /**
+   * Cycle through available views (Phase 2 feature)
+   */
+  cycleView() {
+    // For Phase 1, just show a message
+    this.uiState.setMessage('Multi-view interface will be available in Phase 2', 'yellow');
+    
+    // Phase 2 implementation would be:
+    /*
+    this.currentViewIndex = (this.currentViewIndex + 1) % this.views.length;
+    this.showCurrentView();
+    this.uiState.setMessage(`Switched to ${this.views[this.currentViewIndex]} view`, 'cyan');
+    */
+  }
+
+  /**
+   * Show the current view and hide others
+   */
+  showCurrentView() {
+    // Hide all views
+    this.storyView.hide();
+    this.directView.hide();
+    this.influenceView.hide();
+    this.liveView.hide();
+    this.chatView.hide();
+    
+    // Show current view
+    switch (this.views[this.currentViewIndex]) {
+      case 'story':
+        this.storyView.show();
+        break;
+      case 'direct':
+        this.directView.show();
+        this.updateDirectView();
+        break;
+      case 'influence':
+        this.influenceView.show();
+        this.updateInfluenceView();
+        break;
+      case 'live':
+        this.liveView.show();
+        this.updateLiveView();
+        break;
+      case 'chat':
+        this.chatView.show();
+        this.updateChatView();
+        break;
+    }
+    
     this.render();
   }
 
-  // Goals management (competition mode)
+  /**
+   * Update the Direct view content (Phase 2)
+   */
+  updateDirectView() {
+    const story = this.uiState.getFullStory();
+    const lastParagraph = story.split('\n\n').filter(p => p.trim()).pop() || '';
+    
+    const content = `
+{yellow-fg}Recent story context:{/yellow-fg}
+...${lastParagraph}
+
+{green-fg}[🎯 Next segment generates in ${Math.floor(this.uiState.getTimeRemaining() / 1000)} seconds...]{/green-fg}
+
+{white-fg}Write exact text to include in the story:{/white-fg}
+`;
+    
+    this.directView.setContent(content);
+  }
+
+  /**
+   * Update the Influence view content (Phase 2)
+   */
+  updateInfluenceView() {
+    const story = this.uiState.getFullStory();
+    const lastParagraph = story.split('\n\n').filter(p => p.trim()).pop() || '';
+    
+    const content = `
+{yellow-fg}Recent story context:{/yellow-fg}
+...${lastParagraph}
+
+{green-fg}[🎯 Next segment generates in ${Math.floor(this.uiState.getTimeRemaining() / 1000)} seconds...]{/green-fg}
+
+{white-fg}Guide the story direction:{/white-fg}
+`;
+    
+    this.influenceView.setContent(content);
+  }
+
+  /**
+   * Update the Live view content (Phase 2)
+   */
+  updateLiveView() {
+    const recentInputs = this.uiState.getRecentInputs();
+    const content = recentInputs.length > 0 
+      ? recentInputs.join('\n')
+      : '{white-fg}Waiting for player inputs...{/white-fg}';
+    
+    this.liveView.setContent(content);
+  }
+
+  /**
+   * Update the Chat view content (Phase 2)
+   */
+  updateChatView() {
+    const content = '{yellow-fg}Chat feature will be available in Phase 2{/yellow-fg}';
+    this.chatView.setContent(content);
+  }
+
+  /**
+   * Show goals modal (competition mode)
+   */
   showGoals() {
-    let content = '\n  Your secret goals:\n\n';
-    const goals = this.uiState.playerGoals || [];
+    const goals = this.uiState.getGoals();
+    let content = '\n{yellow-fg}Your secret goals:{/yellow-fg}\n\n';
+    
     if (goals.length === 0) {
-      content += '  {center}No goals assigned yet{/center}\n';
+      content += '{center}No goals assigned yet{/center}\n';
     } else {
       goals.forEach((goal, index) => {
-        const status = goal.achieved ? '✅' : '❓';
+        const status = goal.achieved ? '{green-fg}✅{/green-fg}' : '{white-fg}❓{/white-fg}';
         const text = goal.text || String(goal);
         content += `  ${status} Goal ${index + 1}: ${text}\n`;
       });
     }
-    content += '\n  Press any key to return to story...';
+    
+    content += '\n{center}{white-fg}Press any key to return to story...{/white-fg}{/center}';
+    
     this.goalsModal.show(content);
-
-    const hideHandler = () => {
-      this.goalsModal.hide();
+    this.goalsModal.setOnHide(() => {
       this.inputBar.focus();
-      this.screen.render();
-      this.goalsModal.getElement().removeListener('keypress', hideHandler);
-    };
-    this.goalsModal.getElement().on('keypress', hideHandler);
+    });
   }
 
-  hideGoals() {
-    this.goalsModal.hide();
-    this.inputBar.focus();
-    this.render();
-  }
-
-  // Story content management
-  addStorySegment(segment) {
-    this.storyText += `\n\n${segment.text}`;
-    this.updateStoryDisplay();
-    this.showMessage(`📖 New story segment generated`, 'green');
-  }
-
-  addRecentInput(inputText) {
-    this.uiState.addRecentInput(inputText);
-  }
-
-  // Status bar updates
-  updateStatus() {
-    this.statusBar.render(this.uiState);
-  }
-
-  updateSessionInfo(session) {
-    this.uiState.setSession(session);
-    this.updateStatus();
-    this.render();
-  }
-
-  // Input handling
-  async submitCurrentInput() {
-    const content = this.inputBox.getValue().trim();
-    if (!content) return;
-
-    this.inputBox.clearValue();
-
-    try {
-      const session = this.client.getSession();
-      
-      if (session?.storyState.seedingPhase) {
-        await this.client.submitStorySeed(content);
-        this.showMessage('Story seed submitted', 'green');
-      } else if (this.inputMode === 'direct') {
-        await this.client.submitDirectInput(content);
-        this.showMessage('Direct input submitted', 'green');
-      } else {
-        await this.client.submitInfluenceInput(content);
-        this.showMessage('Influence input submitted', 'green');
-      }
-    } catch (error) {
-      this.showMessage(`Failed to submit input: ${error.message}`, 'red');
-    }
-  }
-
+  /**
+   * Request to skip the wait time
+   */
   requestSkip() {
-    // Placeholder for skip functionality
-    this.showMessage('Skip functionality will be implemented with story engine', 'yellow');
+    // Phase 1: Just show message
+    this.uiState.setMessage('Skip functionality will be implemented with story engine', 'yellow');
+    
+    // Phase 2 would emit: this.client.emit('skip_request');
   }
 
-  // UI utilities
-  showMessage(message, color = 'white') {
-    this.uiState.setMessage(message, color);
-    this.updateStatus();
-    this.render();
+  /**
+   * Show configuration panel (Phase 3 feature)
+   */
+  showConfig() {
+    // Phase 1: Just show message
+    this.uiState.setMessage('Configuration panel will be available in Phase 3', 'yellow');
+    
+    // Phase 3 would show actual config UI
   }
 
+  /**
+   * Show help modal
+   */
   showHelp() {
     const helpText = `
 {center}{bold}STORY CHEF - HELP{/bold}{/center}
@@ -338,9 +589,9 @@ class TerminalUI {
   Esc/Ctrl+C   Exit
 
 {bold}Input Modes:{/bold}
-  DIRECT       Write exact text to include in story
-  INFLUENCE    Suggest story direction and themes
-  SEEDING      Create initial story foundation (30 seconds)
+  {yellow-fg}SEEDING{/yellow-fg}     Create initial story foundation (30 seconds)
+  {green-fg}DIRECT{/green-fg}      Write exact text to include in story
+  {magenta-fg}INFLUENCE{/magenta-fg}   Suggest story direction and themes
 
 {bold}Game Flow:{/bold}
   1. Create or join session with game code
@@ -349,44 +600,87 @@ class TerminalUI {
   4. AI generates story segments every 30 seconds
   5. Story concludes after 10 minutes
 
-Press any key to return...
-`;
+{bold}Competition Mode:{/bold}
+  - Each player receives secret goals
+  - Try to guide the story to achieve your goals
+  - Goals are scored at the end (1-3 points each)
+  - Winner has the highest total score
 
+{center}{white-fg}Press any key to return...{/white-fg}{/center}
+`;
+    
     this.helpModal.show(helpText);
-    const hideHelp = () => {
-      this.helpModal.hide();
+    this.helpModal.setOnHide(() => {
       this.inputBar.focus();
-      this.render();
-      this.helpModal.getElement().removeListener('keypress', hideHelp);
-    };
-    this.helpModal.getElement().on('keypress', hideHelp);
+    });
   }
 
+  /**
+   * Main render method
+   */
   render() {
+    // Update all visible components
     this.statusBar.render(this.uiState);
     this.storyView.render(this.uiState);
     this.inputBar.render(this.uiState);
+    
+    // Update view-specific content if needed
+    if (this.views[this.currentViewIndex] !== 'story') {
+      this.showCurrentView();
+    }
+    
+    // Render screen
     this.screen.render();
   }
 
+  /**
+   * Clean shutdown
+   */
   shutdown() {
+    this.cleanup();
     this.client.disconnect();
-    this.screen.destroy();
     process.exit(0);
   }
 
-  // Public methods for external control
+  /**
+   * Cleanup resources
+   */
+  cleanup() {
+    this.uiState.destroy();
+    if (this.screen) {
+      this.screen.destroy();
+    }
+  }
+
+  // Public API methods
+
+  /**
+   * Display welcome message
+   */
   displayWelcome() {
-    this.showMessage('🌟 Welcome to Story Chef! 🌟', 'cyan');
-    this.showMessage('Create a new session or join existing one with a game code.', 'white');
+    this.uiState.setMessage('🌟 Welcome to Story Chef! 🌟', 'cyan');
     this.render();
   }
 
+  /**
+   * Show a message to the user
+   */
+  showMessage(message, color = 'white') {
+    this.uiState.setMessage(message, color);
+    this.render();
+  }
+
+  /**
+   * Set player goals (competition mode)
+   */
   setPlayerGoals(goals) {
     this.uiState.setGoals(goals);
     this.showMessage(`🎯 ${goals.length} secret goals assigned`, 'magenta');
   }
 
+  /**
+   * Focus the input bar
+   */
   focusInput() {
     this.inputBar.focus();
     this.render();
