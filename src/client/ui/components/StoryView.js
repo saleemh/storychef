@@ -14,14 +14,10 @@ class StoryView {
     this.container = blessed.box({
       top: 3,
       left: 0,
-      width: '100%-1',  // Leave 1 char for right border
-      height: '100%-7',  // Full height minus status bar (3) and input bar (3) and buffer (1)
+      right: 0,  // Use right anchor instead of width
+      bottom: 3, // Use bottom anchor instead of height calculation
       border: {
-        type: 'line',
-        top: true,
-        bottom: true,
-        left: true,
-        right: true
+        type: 'line'
       },
       style: {
         border: {
