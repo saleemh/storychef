@@ -36,11 +36,12 @@ class TerminalUI {
 
     // Ensure raw mode for clean input (prevents terminal echo/duplication)
     try {
-      const inp = this.screen.program.input;
-      if (inp && typeof inp.setRawMode === 'function') {
-        inp.setRawMode(true);
-        inp.resume();
+      if (this.screen.program && typeof this.screen.program.setRawMode === 'function') {
+        this.screen.program.setRawMode(true);
       }
+      const inp = this.screen.program.input || process.stdin;
+      if (inp && typeof inp.setRawMode === 'function') inp.setRawMode(true);
+      if (inp && typeof inp.resume === 'function') inp.resume();
     } catch (_) {
       // best-effort; blessed should handle raw mode
     }
