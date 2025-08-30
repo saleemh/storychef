@@ -224,6 +224,7 @@ class StoryEngine extends EventEmitter {
     const storyContext = this.buildStoryContext(session);
     
     // Format player influences
+    this.logger.debug(`Raw pending influences: ${JSON.stringify(session.pendingInputs.influence)}`, sessionId);
     const playerInfluences = this.formatInfluences(session.pendingInputs.influence);
     
     // Format direct content if available
@@ -240,6 +241,8 @@ class StoryEngine extends EventEmitter {
       player_influences: playerInfluences,
       player_direct_content: playerDirectContent
     };
+    
+    this.logger.debug(`AI variables prepared - player_influences: "${playerInfluences}"`, sessionId);
 
     // Call AI to generate segment
     const result = await this.ai.executeTemplate(template, variables);
@@ -288,11 +291,19 @@ class StoryEngine extends EventEmitter {
   }
 
   formatInfluences(influences) {
-    if (influences.length === 0) return 'None';
+    this.logger.debug(`Formatting ${influences.length} influences: ${JSON.stringify(influences)}`);
     
-    return influences.map(input => 
+    if (influences.length === 0) {
+      this.logger.debug('No influences to format, returning "None"');
+      return 'None';
+    }
+    
+    const formatted = influences.map(input => 
       `${input.playerName}: ${input.content}`
     ).join('\n');
+    
+    this.logger.debug(`Formatted influences: ${formatted}`);
+    return formatted;
   }
 
   formatDirectContent(directInputs) {

@@ -186,12 +186,16 @@ class SessionManager extends EventEmitter {
     if (inputType === 'direct') {
       session.pendingInputs.direct.push(input);
       player.contributions.directWords += wordCount;
+      this.logger.debug(`Added direct input: ${JSON.stringify(input)}`, sessionId);
     } else if (inputType === 'influence') {
       session.pendingInputs.influence.push(input);
       player.contributions.influenceWords += wordCount;
+      this.logger.debug(`Added influence input: ${JSON.stringify(input)}`, sessionId);
+      this.logger.debug(`Total influences now: ${session.pendingInputs.influence.length}`, sessionId);
     } else if (inputType === 'seed') {
       session.pendingInputs.seeds.push(input);
       player.contributions.seedWords += wordCount;
+      this.logger.debug(`Added seed input: ${JSON.stringify(input)}`, sessionId);
     }
 
     player.contributions.inputCount++;
@@ -225,6 +229,7 @@ class SessionManager extends EventEmitter {
     session.lastActivity = new Date();
 
     // Clear processed inputs
+    this.logger.debug(`Clearing ${session.pendingInputs.direct.length} direct and ${session.pendingInputs.influence.length} influence inputs`, sessionId);
     session.pendingInputs.direct = [];
     session.pendingInputs.influence = [];
 
