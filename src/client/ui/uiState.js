@@ -85,11 +85,18 @@ class UIState extends EventEmitter {
 
   // Input tracking
   addRecentInput(inputText) {
-    this.recentInputs.unshift(inputText);
+    // Add timestamp to input
+    const inputWithTimestamp = {
+      text: inputText,
+      timestamp: new Date()
+    };
+    
+    // Add to end of array (newest at bottom)
+    this.recentInputs.push(inputWithTimestamp);
     
     // Keep only the most recent inputs
     if (this.recentInputs.length > this.maxRecentInputs) {
-      this.recentInputs = this.recentInputs.slice(0, this.maxRecentInputs);
+      this.recentInputs.shift(); // Remove oldest (first item)
     }
     
     this.emit('change', { type: 'input_added', input: inputText });

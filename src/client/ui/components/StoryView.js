@@ -138,28 +138,48 @@ class StoryView {
     const paragraphs = text.split(/\n\n+/);
     
     return paragraphs
-      .map(paragraph => {
-        // Wrap long lines
-        return this.wrapText(paragraph.trim(), this.storyBox.width - 4);
+      .map((paragraph, index) => {
+        const wrappedText = this.wrapText(paragraph.trim(), this.storyBox.width - 4);
+        
+        // Make the last (most recent) paragraph bold
+        if (index === paragraphs.length - 1 && paragraphs.length > 1) {
+          return `{bold}${wrappedText}{/bold}`;
+        }
+        
+        return wrappedText;
       })
       .filter(p => p.length > 0)
       .join('\n\n');
   }
 
   formatInput(input, index) {
+    // Handle new input format with timestamp object
+    const inputText = input.text || input;
+    const timestamp = input.timestamp || new Date();
+    
     // Parse input format: "PlayerName [TYPE]: content"
-    const match = input.match(/^(.+?) \[(SEED|DIRECT|INFLUENCE)\]: (.+)$/);
+    const match = inputText.match(/^(.+?) \[(SEED|DIRECT|INFLUENCE)\]: (.+)$/);
     
     if (match) {
       const [, playerName, inputType, content] = match;
       const typeColor = this.getInputTypeColor(inputType);
-      const timestamp = new Date().toLocaleTimeString();
+      const timeStr = this.formatTimestamp(timestamp);
       
-      return `{cyan-fg}${playerName}{/cyan-fg} {${typeColor}-fg}[${inputType}]{/${typeColor}-fg}: ${content}`;
+      // Format: [influence] samoda-mac 4:35pm: content
+      return `{${typeColor}-fg}[${inputType.toLowerCase()}]{/${typeColor}-fg} {cyan-fg}${playerName.toLowerCase()}{/cyan-fg} {gray-fg}${timeStr}{/gray-fg}: ${content}`;
     }
     
     // Fallback for non-standard format
-    return `{white-fg}${input}{/white-fg}`;
+    return `{white-fg}${inputText}{/white-fg}`;
+  }
+
+  formatTimestamp(timestamp) {
+    const now = new Date(timestamp);
+    return now.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    }).toLowerCase();
   }
 
   getInputTypeColor(type) {
