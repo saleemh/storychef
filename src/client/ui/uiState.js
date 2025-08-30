@@ -153,9 +153,11 @@ class UIState extends EventEmitter {
     // Clear any existing ticker
     this.stopTicker();
     
-    // Update timer every second
+    // Update timer every second for smooth countdown display
+    // But rely on server for authoritative time updates
     this.timerInterval = setInterval(() => {
       if (this.timeRemaining > 0) {
+        // Only decrease by 1 second for smooth UI, server will correct it
         this.timeRemaining = Math.max(0, this.timeRemaining - 1000);
         this.emit('tick', { timeRemaining: this.timeRemaining });
       }

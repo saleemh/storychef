@@ -73,6 +73,7 @@ class StoryChefServer {
     this.sessionManager.on('story_started', this.handleStoryStarted.bind(this));
     this.sessionManager.on('segment_added', this.handleSegmentAdded.bind(this));
     this.sessionManager.on('story_completed', this.handleStoryCompleted.bind(this));
+    this.sessionManager.on('session_timer_update', this.handleSessionTimerUpdate.bind(this));
 
     // LiteLLM Bridge events
     this.liteLLMBridge.on('request_started', (data) => {
@@ -357,6 +358,11 @@ class StoryChefServer {
       duration,
       segments: session.storyState.segments.length
     });
+  }
+
+  handleSessionTimerUpdate({ sessionId }) {
+    // Send updated session data to all clients so they get the current timeRemaining
+    this.updateSessionForClients(sessionId);
   }
 
   // Helper methods

@@ -217,7 +217,45 @@ class SessionManager extends EventEmitter {
     this.logger.info(`Story generation started`, sessionId);
     this.emit('story_started', { sessionId });
     
+    // Start the main story timer to update timeRemaining
+    this.startStoryTimer(sessionId);
+    
     return true;
+  }
+
+  startStoryTimer(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session || !session.storyState.isActive) return;
+
+    // Update timeRemaining every second based on actual elapsed time
+    const updateTimer = () => {
+      const session = this.sessions.get(sessionId);
+      if (!session || !session.storyState.isActive || session.storyState.isCompleted) return;
+
+      const now = new Date();
+      const elapsed = now - session.storyState.storyStartTime;
+      const remaining = Math.max(0, this.config.storyPacing.storyTimeLimit - elapsed);
+      
+      session.storyState.timeRemaining = remaining;
+      
+      // Emit session update every 5 seconds so clients get updated time
+      if (Math.floor(remaining / 1000) % 5 === 0) {
+        this.emit('session_timer_update', { sessionId });
+      }
+      
+      if (remaining <= 0) {
+        // Time's up! Complete the story
+        this.logger.info('Story time limit reached, completing story', sessionId);
+        this.completeStory(sessionId);
+        return;
+      }
+      
+      // Continue updating every second
+      setTimeout(updateTimer, 1000);
+    };
+
+    // Start the timer
+    updateTimer();
   }
 
   addStorySegment(sessionId, segment) {
