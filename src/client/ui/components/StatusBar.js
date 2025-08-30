@@ -1,5 +1,5 @@
 const blessed = require('blessed');
-const Utils = require('../../shared/utils');
+const Utils = require('../../../shared/utils');
 
 /**
  * StatusBar - Top status bar showing game information
