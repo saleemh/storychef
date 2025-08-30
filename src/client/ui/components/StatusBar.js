@@ -56,11 +56,22 @@ class StatusBar {
     const phaseColor = this.getPhaseColor(phase);
     components.push(`{${phaseColor}-fg}${phase}{/${phaseColor}-fg}`);
     
-    // Time remaining
-    if (uiState.isStoryActive() || uiState.isInSeedingPhase()) {
-      const timeStr = Utils.formatTime(uiState.getTimeRemaining());
-      const timeColor = uiState.getTimeRemaining() < 60000 ? 'red' : 'green';
-      components.push(`{${timeColor}-fg}${timeStr}{/${timeColor}-fg}`);
+    // Story time remaining (overall story timer)
+    if (uiState.isStoryActive()) {
+      const storyTimeStr = Utils.formatTime(uiState.getTimeRemaining());
+      const storyTimeColor = uiState.getTimeRemaining() < 60000 ? 'red' : 'green';
+      components.push(`{${storyTimeColor}-fg}STORY ${storyTimeStr}{/${storyTimeColor}-fg}`);
+    }
+    
+    // Segment time remaining (current input period)
+    if (uiState.isInSeedingPhase() || uiState.isStoryActive()) {
+      const segmentTime = uiState.getSegmentTimeRemaining();
+      if (segmentTime > 0) {
+        const segmentTimeStr = Utils.formatTime(segmentTime);
+        const segmentTimeColor = segmentTime < 10000 ? 'yellow' : 'cyan';
+        const phaseLabel = uiState.isInSeedingPhase() ? 'SEEDING' : 'SEGMENT';
+        components.push(`{${segmentTimeColor}-fg}${phaseLabel} ${segmentTimeStr}{/${segmentTimeColor}-fg}`);
+      }
     }
     
     // Player count

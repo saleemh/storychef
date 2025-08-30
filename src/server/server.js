@@ -388,7 +388,8 @@ class StoryChefServer {
         seedingPhase: session.storyState.seedingPhase,
         isActive: session.storyState.isActive,
         isCompleted: session.storyState.isCompleted,
-        timeRemaining: session.storyState.timeRemaining
+        timeRemaining: session.storyState.timeRemaining,
+        segmentTimeRemaining: session.storyState.segmentTimeRemaining || 0
       },
       competitionMode: session.competitionMode,
       config: {

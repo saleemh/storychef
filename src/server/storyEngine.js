@@ -56,6 +56,9 @@ class StoryEngine extends EventEmitter {
     // Set seeding phase timer
     const seedingTime = this.config.storyPacing.seedingTime;
     
+    // Update session manager with seeding timer
+    engineState.sessionManager.setSeedingTimer(sessionId, seedingTime);
+    
     engineState.timer = setTimeout(() => {
       this.endSeedingPhase(sessionId);
     }, seedingTime);
@@ -147,6 +150,9 @@ class StoryEngine extends EventEmitter {
 
     const segmentDelay = this.config.storyPacing.segmentDelay;
 
+    // Update session manager with segment timer
+    engineState.sessionManager.setNextSegmentTime(sessionId, segmentDelay);
+
     engineState.segmentTimer = setTimeout(() => {
       this.generateNextSegment(sessionId);
     }, segmentDelay);
@@ -189,7 +195,8 @@ class StoryEngine extends EventEmitter {
       
       const segment = await this.generateStorySegment(session, engineState.currentSegment);
       
-      // Add segment to session
+      // Clear current timer and add segment to session
+      engineState.sessionManager.clearSegmentTimer(sessionId);
       engineState.sessionManager.addStorySegment(sessionId, segment);
       
       this.logger.info(`Generated segment ${engineState.currentSegment}`, sessionId);

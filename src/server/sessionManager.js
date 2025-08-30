@@ -28,6 +28,8 @@ class SessionManager extends EventEmitter {
         seedingStartTime: timestamp,
         storyStartTime: null,
         timeRemaining: this.config.storyPacing.storyTimeLimit,
+        segmentTimeRemaining: 0, // Time until next segment generation
+        nextSegmentAt: null, // When the next segment will generate
         isActive: false,
         isCompleted: false
       },
@@ -238,8 +240,14 @@ class SessionManager extends EventEmitter {
       
       session.storyState.timeRemaining = remaining;
       
-      // Emit session update every 5 seconds so clients get updated time
-      if (Math.floor(remaining / 1000) % 5 === 0) {
+      // Update segment timer if we have a next segment time
+      if (session.storyState.nextSegmentAt) {
+        const segmentRemaining = Math.max(0, session.storyState.nextSegmentAt - now);
+        session.storyState.segmentTimeRemaining = segmentRemaining;
+      }
+      
+      // Emit session update every 2 seconds so clients get updated times
+      if (Math.floor(remaining / 1000) % 2 === 0) {
         this.emit('session_timer_update', { sessionId });
       }
       
@@ -295,6 +303,35 @@ class SessionManager extends EventEmitter {
     this.emit('story_completed', { sessionId, session, duration });
 
     return true;
+  }
+
+  // Set the next segment generation time
+  setNextSegmentTime(sessionId, segmentDelay) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const now = new Date();
+    session.storyState.nextSegmentAt = new Date(now.getTime() + segmentDelay);
+    session.storyState.segmentTimeRemaining = segmentDelay;
+  }
+
+  // Set seeding phase timer
+  setSeedingTimer(sessionId, seedingTime) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const now = new Date();
+    session.storyState.nextSegmentAt = new Date(now.getTime() + seedingTime);
+    session.storyState.segmentTimeRemaining = seedingTime;
+  }
+
+  // Clear segment timer (when segment is generated)
+  clearSegmentTimer(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    session.storyState.nextSegmentAt = null;
+    session.storyState.segmentTimeRemaining = 0;
   }
 
   buildStoryContext(session, maxSegments = 5) {

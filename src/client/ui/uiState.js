@@ -35,6 +35,7 @@ class UIState extends EventEmitter {
     
     // Timer state
     this.timeRemaining = 0;
+    this.segmentTimeRemaining = 0;
     this.timerInterval = null;
   }
 
@@ -45,6 +46,11 @@ class UIState extends EventEmitter {
     // Update time remaining from session
     if (session?.storyState?.timeRemaining) {
       this.timeRemaining = session.storyState.timeRemaining;
+    }
+    
+    // Update segment time remaining from session
+    if (session?.storyState?.segmentTimeRemaining !== undefined) {
+      this.segmentTimeRemaining = session.storyState.segmentTimeRemaining;
     }
     
     this.emit('change', { type: 'session', session });
@@ -159,8 +165,17 @@ class UIState extends EventEmitter {
       if (this.timeRemaining > 0) {
         // Only decrease by 1 second for smooth UI, server will correct it
         this.timeRemaining = Math.max(0, this.timeRemaining - 1000);
-        this.emit('tick', { timeRemaining: this.timeRemaining });
       }
+      
+      if (this.segmentTimeRemaining > 0) {
+        // Also countdown segment timer
+        this.segmentTimeRemaining = Math.max(0, this.segmentTimeRemaining - 1000);
+      }
+      
+      this.emit('tick', { 
+        timeRemaining: this.timeRemaining,
+        segmentTimeRemaining: this.segmentTimeRemaining
+      });
     }, 1000);
   }
 
@@ -178,6 +193,10 @@ class UIState extends EventEmitter {
 
   getTimeRemaining() {
     return this.timeRemaining;
+  }
+
+  getSegmentTimeRemaining() {
+    return this.segmentTimeRemaining;
   }
 
   // Game phase helpers
