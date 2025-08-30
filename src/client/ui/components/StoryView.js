@@ -15,7 +15,7 @@ class StoryView {
       top: 3,
       left: 0,
       width: '100%',
-      height: '70%',
+      bottom: 3,  // Leave space for input bar at bottom
       border: {
         type: 'line'
       },
