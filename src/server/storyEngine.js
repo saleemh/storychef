@@ -232,7 +232,7 @@ class StoryEngine extends EventEmitter {
     
     // Format player influences
     this.logger.debug(`Raw pending influences: ${JSON.stringify(session.pendingInputs.influence)}`, sessionId);
-    const playerInfluences = this.formatInfluences(session.pendingInputs.influence);
+    const playerInfluences = this.formatInfluences(session.pendingInputs.influence, sessionId);
     
     // Format direct content if available
     const playerDirectContent = hasDirectInputs ? 
@@ -297,11 +297,11 @@ class StoryEngine extends EventEmitter {
     return context.trim();
   }
 
-  formatInfluences(influences) {
-    this.logger.debug(`Formatting ${influences.length} influences: ${JSON.stringify(influences)}`);
+  formatInfluences(influences, sessionId = null) {
+    this.logger.debug(`Formatting ${influences.length} influences: ${JSON.stringify(influences)}`, sessionId);
     
     if (influences.length === 0) {
-      this.logger.debug('No influences to format, returning "None"');
+      this.logger.debug('No influences to format, returning "None"', sessionId);
       return 'None';
     }
     
@@ -309,7 +309,7 @@ class StoryEngine extends EventEmitter {
       `${input.playerName}: ${input.content}`
     ).join('\n');
     
-    this.logger.debug(`Formatted influences: ${formatted}`);
+    this.logger.debug(`Formatted influences: ${formatted}`, sessionId);
     return formatted;
   }
 
@@ -353,7 +353,7 @@ class StoryEngine extends EventEmitter {
 
     try {
       // Generate conclusion segment
-      const conclusionSegment = await this.generateConclusion(session);
+      const conclusionSegment = await this.generateConclusion(session, sessionId);
       
       // Add conclusion to session
       engineState.sessionManager.addStorySegment(sessionId, conclusionSegment);
@@ -376,9 +376,9 @@ class StoryEngine extends EventEmitter {
     this.stopSession(sessionId);
   }
 
-  async generateConclusion(session) {
+  async generateConclusion(session, sessionId) {
     const storyContext = this.buildStoryContext(session, 5); // Use more context for conclusion
-    const playerInfluences = this.formatInfluences(session.pendingInputs.influence);
+    const playerInfluences = this.formatInfluences(session.pendingInputs.influence, sessionId);
     const playerDirectContent = this.formatDirectContent(session.pendingInputs.direct);
     
     const variables = {
