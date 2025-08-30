@@ -81,8 +81,8 @@ program
       
       // Create client and UI
       const client = new StoryChefClient(options.server);
-      const terminalUI = new TerminalUI(client);
       const inputProcessor = new InputProcessor(client);
+      const terminalUI = new TerminalUI(client, inputProcessor);
       
       // Connect to server
       await client.connect();
@@ -106,6 +106,11 @@ program
         terminalUI.showMessage('Use create-session or join-session commands, or press ? for help');
       }
       
+      // Ensure clean exit on Ctrl+C
+      process.on('SIGINT', () => {
+        terminalUI.shutdown();
+      });
+
       // Focus input for user interaction
       terminalUI.focusInput();
       
@@ -124,13 +129,19 @@ program
   .action(async (options) => {
     try {
       const client = new StoryChefClient(options.server);
-      const terminalUI = new TerminalUI(client);
+      const inputProcessor = new InputProcessor(client);
+      const terminalUI = new TerminalUI(client, inputProcessor);
       
       await client.connect();
       
       const playerName = options.name || await promptForName();
       const result = await client.createSession(playerName);
       
+      // Ensure clean exit on Ctrl+C
+      process.on('SIGINT', () => {
+        terminalUI.shutdown();
+      });
+
       // Send messages through terminal UI instead of console.log to avoid interference
       terminalUI.displayWelcome();
       terminalUI.showMessage(`✅ Session created: ${result.sessionId}`, 'green');
@@ -154,13 +165,19 @@ program
   .action(async (sessionCode, options) => {
     try {
       const client = new StoryChefClient(options.server);
-      const terminalUI = new TerminalUI(client);
+      const inputProcessor = new InputProcessor(client);
+      const terminalUI = new TerminalUI(client, inputProcessor);
       
       await client.connect();
       
       const playerName = options.name || await promptForName();
       await client.joinSession(sessionCode, playerName);
       
+      // Ensure clean exit on Ctrl+C
+      process.on('SIGINT', () => {
+        terminalUI.shutdown();
+      });
+
       // Send message through terminal UI instead of console.log
       terminalUI.showMessage(`✅ Joined session: ${sessionCode}`, 'green');
       

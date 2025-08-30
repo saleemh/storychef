@@ -119,7 +119,7 @@ class StoryEngine extends EventEmitter {
     if (!session || session.storyState.isCompleted) return;
 
     // Check if story generation was paused due to no players
-    const connectedPlayers = (Array.isArray(session.players) ? session.players : []).filter(p => p.isConnected);
+    const connectedPlayers = Array.from(session.players.values()).filter(p => p.isConnected);
     if (connectedPlayers.length > 0 && engineState.isRunning && !engineState.segmentTimer) {
       this.logger.info('Resuming story generation - players reconnected', sessionId);
       this.scheduleNextSegment(sessionId);
@@ -133,9 +133,8 @@ class StoryEngine extends EventEmitter {
     const session = engineState.sessionManager.getSession(sessionId);
     if (!session || session.storyState.isCompleted) return;
 
-    // Check if any players are still connected
-    const players = session.players || [];
-    const connectedPlayers = Array.isArray(players) ? players.filter(p => p && p.isConnected) : [];
+    // Check if any players are still connected (players is a Map)
+    const connectedPlayers = Array.from(session.players.values()).filter(p => p && p.isConnected);
     
     // Debug logging to understand the session structure
     this.logger.debug(`Players check: total=${players.length}, connected=${connectedPlayers.length}`, sessionId);
@@ -165,7 +164,7 @@ class StoryEngine extends EventEmitter {
     const connectedPlayers = Array.isArray(players) ? players.filter(p => p && p.isConnected) : [];
     
     // Debug logging to understand the session structure
-    this.logger.debug(`Generate segment players check: total=${players.length}, connected=${connectedPlayers.length}`, sessionId);
+    this.logger.debug(`Generate segment players check: total=${session.players.size}, connected=${connectedPlayers.length}`, sessionId);
     
     if (connectedPlayers.length === 0) {
       this.logger.info('Skipping segment generation - no connected players', sessionId);
