@@ -234,6 +234,7 @@ class StoryEngine extends EventEmitter {
     // Format player influences
     this.logger.debug(`Raw pending influences: ${JSON.stringify(session.pendingInputs.influence)}`, sessionId);
     const playerInfluences = this.formatInfluences(session.pendingInputs.influence, sessionId);
+    this.logger.info(`Influences being sent to LLM for segment ${segmentNumber}: ${playerInfluences}`, sessionId);
     
     // Format direct content if available
     const playerDirectContent = hasDirectInputs ? 
@@ -251,6 +252,8 @@ class StoryEngine extends EventEmitter {
     };
     
     this.logger.debug(`AI variables prepared - player_influences: "${playerInfluences}"`, sessionId);
+    this.logger.info(`Generating segment ${segmentNumber} with template: ${template}`, sessionId);
+    this.logger.info(`Story context length: ${storyContext.length} chars, Direct inputs: ${session.pendingInputs.direct.length}, Influence inputs: ${session.pendingInputs.influence.length}`, sessionId);
 
     // Call AI to generate segment
     const result = await this.ai.executeTemplate(template, variables);

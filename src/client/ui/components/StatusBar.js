@@ -87,9 +87,9 @@ class StatusBar {
     const hostPlayer = uiState.getHostPlayer();
     if (hostPlayer) {
       if (uiState.isHost()) {
-        components.push(`{green-fg}👑 ${hostPlayer.name}{/green-fg}`);
+        components.push(`{green-fg}HOST ${hostPlayer.name}{/green-fg}`);
       } else {
-        components.push(`{white-fg}👑 ${hostPlayer.name}{/white-fg}`);
+        components.push(`{white-fg}HOST ${hostPlayer.name}{/white-fg}`);
       }
     }
 
