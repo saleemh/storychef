@@ -20,6 +20,7 @@ class TerminalUI {
     this.playerGoals = [];
     this.storyText = '';
     this.recentInputs = [];
+    this.lastMessage = null;
     
     this.setupScreen();
     this.setupEventHandlers();
@@ -39,12 +40,12 @@ class TerminalUI {
   }
 
   setupViews() {
-    // Main story display box
+    // Main story display box - top 70% of screen
     this.storyBox = blessed.box({
       top: 0,
       left: 0,
       width: '100%',
-      height: '75%',
+      height: '70%',
       border: { type: 'line' },
       scrollable: true,
       alwaysScroll: true,
@@ -56,9 +57,9 @@ class TerminalUI {
       }
     });
 
-    // Status bar showing timer, players, etc.
+    // Status bar - fixed 3 lines height
     this.statusBar = blessed.box({
-      top: '75%',
+      top: '70%',
       left: 0,
       width: '100%',
       height: 3,
@@ -70,16 +71,15 @@ class TerminalUI {
       }
     });
 
-    // Input box for user input
-    this.inputBox = blessed.textbox({
-      top: '75%+3',
+    // Input box - try textarea for better input handling
+    this.inputBox = blessed.textarea({
+      top: '70%+3',
       left: 0,
       width: '100%',
-      height: '25%-3',
+      height: 5,
       border: { type: 'line' },
-      inputOnFocus: true,
       keys: true,
-      tags: true,
+      mouse: true,
       label: ` [${this.inputMode.toUpperCase()} MODE] Type your ${this.inputMode} `,
       style: {
         border: { fg: 'magenta' },
@@ -110,7 +110,8 @@ class TerminalUI {
     this.screen.append(this.inputBox);
     this.screen.append(this.goalsOverlay);
 
-    // Focus input box initially
+    // Focus input box initially and ensure it's empty
+    this.inputBox.clearValue();
     this.inputBox.focus();
   }
 
@@ -141,6 +142,8 @@ class TerminalUI {
     this.screen.key(['tab'], () => {
       this.toggleInputMode();
     });
+
+    // Removed problematic keypress listener that was causing duplicate characters
 
     // ESC/Ctrl+C: Exit
     this.screen.key(['escape', 'C-c'], () => {
@@ -238,6 +241,8 @@ class TerminalUI {
     this.inputMode = this.inputMode === 'influence' ? 'direct' : 'influence';
     this.updateLabel();
     this.showMessage(`Switched to ${this.inputMode.toUpperCase()} mode`, 'cyan');
+    // Ensure input box has focus after mode switch
+    this.inputBox.focus();
   }
 
   updateLabel() {
@@ -249,6 +254,7 @@ class TerminalUI {
     }
     
     this.inputBox.setLabel(` [${modeText} MODE] Type your ${session?.storyState.seedingPhase ? 'story seed' : this.inputMode} `);
+    this.inputBox.focus();
     this.render();
   }
 
@@ -367,6 +373,11 @@ class TerminalUI {
       statusText = 'Not connected to a session';
     }
 
+    // Add last message to status if available
+    if (this.lastMessage) {
+      statusText += `\n{dim}[${this.lastMessage.timestamp}]{/dim} ${this.lastMessage.text}`;
+    }
+
     this.statusBar.setContent(`  ${statusText}`);
   }
 
@@ -412,10 +423,13 @@ class TerminalUI {
     const timestamp = new Date().toLocaleTimeString();
     const coloredMessage = color === 'white' ? message : `{${color}-fg}${message}{/}`;
     
-    // Add to story box temporarily
-    const currentContent = this.storyBox.getContent();
-    this.storyBox.setContent(`${currentContent}\n{dim}[${timestamp}]{/dim} ${coloredMessage}`);
-    this.storyBox.scrollTo(this.storyBox.getScrollHeight());
+    // Store the last message to show with status
+    this.lastMessage = {
+      text: coloredMessage,
+      timestamp: timestamp
+    };
+    
+    this.updateStatus();
     this.render();
   }
 

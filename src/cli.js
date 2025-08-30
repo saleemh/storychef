@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const { program } = require('commander');
 const path = require('path');
 const StoryChefServer = require('./server/server');
@@ -19,7 +22,7 @@ program
   .command('server')
   .description('Start the Story Chef server')
   .option('-c, --config <path>', 'Configuration file path', './story-chef.config.json')
-  .option('-p, --port <number>', 'Server port', (val) => parseInt(val))
+  .option('-p, --port <number>', 'Server port', (val) => parseInt(val), 3333)
   .option('--web', 'Enable web terminal interface')
   .option('--log-level <level>', 'Log level (error, warn, info, debug)')
   .action(async (options) => {
@@ -67,7 +70,7 @@ program
 program
   .command('start')
   .description('Start Story Chef client and connect to server')
-  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3000')
+  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3333')
   .option('-n, --name <name>', 'Player name')
   .option('-j, --join <code>', 'Join existing session with code')
   .option('--auto-create', 'Automatically create a session instead of prompting')
@@ -116,7 +119,7 @@ program
 program
   .command('create')
   .description('Create a new story session')
-  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3000')
+  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3333')
   .option('-n, --name <name>', 'Player name')
   .action(async (options) => {
     try {
@@ -128,12 +131,12 @@ program
       const playerName = options.name || await promptForName();
       const result = await client.createSession(playerName);
       
-      console.log(`✅ Session created: ${result.sessionId}`);
-      console.log(`🎮 You are the host of this session`);
-      console.log(`📢 Share this code with other players: ${result.sessionId}`);
-      console.log(`🌐 Or share this URL: http://localhost:3001/join/${result.sessionId}`);
-      
+      // Send messages through terminal UI instead of console.log to avoid interference
       terminalUI.displayWelcome();
+      terminalUI.showMessage(`✅ Session created: ${result.sessionId}`, 'green');
+      terminalUI.showMessage(`🎮 You are the host of this session`, 'cyan');
+      terminalUI.showMessage(`📢 Share this code with other players: ${result.sessionId}`, 'yellow');
+      terminalUI.showMessage(`🌐 Or share this URL: http://localhost:3001/join/${result.sessionId}`, 'blue');
       terminalUI.focusInput();
       
     } catch (error) {
@@ -146,7 +149,7 @@ program
 program
   .command('join <sessionCode>')
   .description('Join an existing story session')
-  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3000')
+  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3333')
   .option('-n, --name <name>', 'Player name')
   .action(async (sessionCode, options) => {
     try {
@@ -158,7 +161,8 @@ program
       const playerName = options.name || await promptForName();
       await client.joinSession(sessionCode, playerName);
       
-      console.log(`✅ Joined session: ${sessionCode}`);
+      // Send message through terminal UI instead of console.log
+      terminalUI.showMessage(`✅ Joined session: ${sessionCode}`, 'green');
       
       terminalUI.displayWelcome();
       terminalUI.focusInput();
@@ -173,7 +177,7 @@ program
 program
   .command('test')
   .description('Test connection to Story Chef server')
-  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3000')
+  .option('-s, --server <url>', 'Server URL', 'ws://localhost:3333')
   .action(async (options) => {
     try {
       console.log(`🔍 Testing connection to ${options.server}...`);

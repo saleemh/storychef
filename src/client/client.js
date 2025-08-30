@@ -3,7 +3,7 @@ const EventEmitter = require('events');
 const Utils = require('../shared/utils');
 
 class StoryChefClient extends EventEmitter {
-  constructor(serverUrl = 'ws://localhost:3000') {
+  constructor(serverUrl = 'ws://localhost:3333') {
     super();
     this.serverUrl = serverUrl;
     this.socket = null;

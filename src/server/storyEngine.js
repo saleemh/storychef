@@ -111,12 +111,40 @@ class StoryEngine extends EventEmitter {
     this.scheduleNextSegment(sessionId);
   }
 
+  resumeStoryGeneration(sessionId) {
+    const engineState = this.activeSessions.get(sessionId);
+    if (!engineState) return;
+
+    const session = engineState.sessionManager.getSession(sessionId);
+    if (!session || session.storyState.isCompleted) return;
+
+    // Check if story generation was paused due to no players
+    const connectedPlayers = (Array.isArray(session.players) ? session.players : []).filter(p => p.isConnected);
+    if (connectedPlayers.length > 0 && engineState.isRunning && !engineState.segmentTimer) {
+      this.logger.info('Resuming story generation - players reconnected', sessionId);
+      this.scheduleNextSegment(sessionId);
+    }
+  }
+
   scheduleNextSegment(sessionId) {
     const engineState = this.activeSessions.get(sessionId);
     if (!engineState || !engineState.isRunning) return;
 
     const session = engineState.sessionManager.getSession(sessionId);
     if (!session || session.storyState.isCompleted) return;
+
+    // Check if any players are still connected
+    const players = session.players || [];
+    const connectedPlayers = Array.isArray(players) ? players.filter(p => p && p.isConnected) : [];
+    
+    // Debug logging to understand the session structure
+    this.logger.debug(`Players check: total=${players.length}, connected=${connectedPlayers.length}`, sessionId);
+    
+    if (connectedPlayers.length === 0) {
+      this.logger.info('Pausing story generation - no connected players', sessionId);
+      // We'll resume when a player reconnects (handled by session manager)
+      return;
+    }
 
     const segmentDelay = this.config.storyPacing.segmentDelay;
 
@@ -131,6 +159,19 @@ class StoryEngine extends EventEmitter {
 
     const session = engineState.sessionManager.getSession(sessionId);
     if (!session) return;
+
+    // Check if any players are still connected
+    const players = session.players || [];
+    const connectedPlayers = Array.isArray(players) ? players.filter(p => p && p.isConnected) : [];
+    
+    // Debug logging to understand the session structure
+    this.logger.debug(`Generate segment players check: total=${players.length}, connected=${connectedPlayers.length}`, sessionId);
+    
+    if (connectedPlayers.length === 0) {
+      this.logger.info('Skipping segment generation - no connected players', sessionId);
+      // Don't schedule next segment - will resume when players reconnected
+      return;
+    }
 
     // Check if story should be completed
     const storyStartTime = session.storyState.storyStartTime;

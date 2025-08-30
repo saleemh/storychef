@@ -2,7 +2,7 @@
 import sys
 import json
 import litellm
-from pdl import exec_dict
+from pdl.pdl import exec_file
 import yaml
 import os
 
@@ -33,15 +33,39 @@ def main():
         template = pdl_config['defs'][template_name]
         variables = input_data.get('variables', {})
         
-        # Execute PDL template with variables
-        result = exec_dict(template, variables)
+        # Since PDL templates are defined in 'defs', we need to call them properly
+        # Let's create a simple PDL that directly executes the template content
+        template_def = pdl_config['defs'][template_name]
+        
+        # Extract the text section from the template definition
+        template_text = template_def['text']
+        
+        # Create a PDL program with just the template content and our variables
+        from pdl.pdl import parse_str, exec_program
+        
+        # Convert the template definition to a direct PDL program
+        direct_pdl = yaml.dump({'text': template_text})
+        
+        parsed_tuple = parse_str(direct_pdl)
+        parsed_program = parsed_tuple[0]
+        result = exec_program(parsed_program, scope=variables)
         
         # Return result to Node.js
+        # PDL exec_program returns the final output as a string
+        result_str = str(result).strip()
+        
+        # Debug: check if result contains unexpected characters
+        if len(result_str) > 200:
+            result_preview = result_str[:200] + "..."
+        else:
+            result_preview = result_str
+            
         output = {
             'success': True,
-            'content': result.get('text', ''),
+            'content': result_str,
             'template': template_name,
-            'variables_used': list(variables.keys())
+            'variables_used': list(variables.keys()),
+            'debug_preview': result_preview
         }
         
         print(json.dumps(output))
@@ -74,10 +98,12 @@ def main():
         sys.exit(1)
         
     except Exception as e:
+        import traceback
         error_output = {
             'success': False,
             'error': f"AI generation error: {str(e)}",
-            'error_type': 'ai_error'
+            'error_type': 'ai_error',
+            'traceback': traceback.format_exc()
         }
         print(json.dumps(error_output))
         sys.exit(1)

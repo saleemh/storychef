@@ -15,7 +15,7 @@
     "storyTimeLimit": 600000
   },
   "server": {
-    "port": 3000,
+    "port": 3333,
     "maxPlayers": 100,
     "maxConcurrentSessions": 50,
     "allowLateJoins": true,

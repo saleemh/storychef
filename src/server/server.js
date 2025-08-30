@@ -321,6 +321,9 @@ class StoryChefServer {
   handlePlayerJoined({ sessionId, playerId, playerName }) {
     // Player joined, update all clients in session
     this.updateSessionForClients(sessionId);
+    
+    // Resume story generation if it was paused
+    this.storyEngine.resumeStoryGeneration(sessionId);
   }
 
   handlePlayerLeft({ sessionId, playerId, playerName }) {
@@ -331,6 +334,9 @@ class StoryChefServer {
   handlePlayerReconnected({ sessionId, playerId, playerName }) {
     // Player reconnected, update all clients in session
     this.updateSessionForClients(sessionId);
+    
+    // Resume story generation if it was paused
+    this.storyEngine.resumeStoryGeneration(sessionId);
   }
 
   handleStoryStarted({ sessionId }) {

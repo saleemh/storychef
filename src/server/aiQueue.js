@@ -28,7 +28,7 @@ class LiteLLMBridge extends EventEmitter {
     this.activeRequests++;
     this.emit('request_started', { templateName, activeRequests: this.activeRequests });
 
-    const pythonPath = process.env.PYTHON_PATH || 'python3';
+    const pythonPath = process.env.PYTHON_PATH || 'python3.11';
     const bridgeScript = path.join(__dirname, 'litellm_bridge.py');
     
     const python = spawn(pythonPath, [bridgeScript], {
