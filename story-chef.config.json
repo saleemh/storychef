@@ -1,0 +1,41 @@
+{
+  "aiModel": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0.8,
+    "maxTokens": 300
+  },
+  "prompts": {
+    "configFile": "./prompts/story-prompts.pdl"
+  },
+  "storyPacing": {
+    "seedingTime": 30000,
+    "segmentDelay": 30000,
+    "segmentLength": "4-6 sentences",
+    "storyTimeLimit": 600000
+  },
+  "server": {
+    "port": 3000,
+    "maxPlayers": 100,
+    "maxConcurrentSessions": 50,
+    "allowLateJoins": true,
+    "reconnectTimeout": 60000,
+    "logLevel": "info",
+    "sessionCleanupInterval": 300000,
+    "aiRequestQueue": {
+      "maxConcurrent": 10,
+      "timeout": 30000
+    }
+  },
+  "webFrontend": {
+    "enabled": false,
+    "port": 3001,
+    "staticPath": "./web"
+  },
+  "competition": {
+    "enabled": false,
+    "goalsPerPlayer": 5,
+    "difficulty": "medium",
+    "globalLeaderboard": true
+  }
+}

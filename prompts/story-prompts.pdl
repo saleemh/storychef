@@ -1,0 +1,160 @@
+description: Story Chef Prompt Templates
+defs:
+  story_segment_generation:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: ${temperature}
+      max_tokens: ${max_tokens}
+    input: |
+      You are a creative storytelling AI helping to generate an interactive story.
+      
+      Current story context:
+      ${story_context}
+      
+      Player influences for this segment:
+      ${player_influences}
+      
+      Generate the next 4-6 sentences that:
+      - Continue the narrative naturally
+      - Incorporate player influences creatively
+      - Maintain story coherence
+      - End with an engaging hook for the next segment
+      
+      Story segment:
+
+  story_segment_with_direct:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: ${temperature}
+      max_tokens: ${max_tokens}
+    input: |
+      You are generating the next segment of an interactive story that includes both player influences and direct story contributions.
+      
+      Current story context:
+      ${story_context}
+      
+      Player influences to incorporate:
+      ${player_influences}
+      
+      Player direct story contributions to weave in:
+      ${player_direct_content}
+      
+      Generate the next 4-6 sentences that:
+      - Naturally incorporate the direct player content
+      - Blend in the player influences seamlessly
+      - Maintain story coherence and flow
+      - Continue the narrative toward the next segment
+      
+      Story segment:
+
+  story_conclusion:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: ${temperature}
+      max_tokens: ${max_tokens}
+    input: |
+      You are concluding an interactive story that has been running for 10 minutes.
+      
+      Story context:
+      ${story_context}
+      
+      Player influences:
+      ${player_influences}
+      
+      Player direct contributions:
+      ${player_direct_content}
+      
+      Create a satisfying conclusion in 4-6 sentences that:
+      - Wraps up the main narrative threads
+      - Incorporates final player influences and direct content
+      - Provides a sense of completion
+      - Ends on a positive, memorable note
+      
+      Final story segment:
+
+  author_contribution_summary:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: 0.3
+      max_tokens: 200
+    input: |
+      Analyze this author's contribution to a collaborative storytelling session and write a concise summary of their involvement style and impact.
+      
+      Author: ${author_name}
+      Role: ${author_role} 
+      
+      Contribution Statistics:
+      - Direct story additions: ${direct_words} words (${direct_percentage}% of player content)
+      - Influence suggestions: ${influence_words} words across ${influence_count} inputs
+      - Total contributions: ${total_inputs}
+      - Most active during: ${active_period}
+      
+      Sample contributions:
+      ${sample_contributions}
+      
+      Key themes in their contributions:
+      ${contribution_themes}
+      
+      Write a 3-4 sentence summary that captures:
+      - Their unique storytelling style and focus areas
+      - How they influenced the narrative direction
+      - Their collaborative approach with other authors
+      - Their distinctive contribution to the story's development
+      
+      Author Summary:
+
+  # Competition Mode PDL Templates
+  
+  competition_goal_generation:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: 1.0
+      max_tokens: 150
+    input: |
+      Generate ${goals_count} highly specific, creative, and unusual story goals for a competitive storytelling game.
+      
+      Difficulty Level: ${difficulty}
+      - Easy: Simple character actions or obvious events
+      - Medium: Specific unusual events with named elements
+      - Hard: Complex multi-part scenarios with precise details
+      
+      Requirements for each goal:
+      - Must be a specific, measurable occurrence 
+      - Should be unusual and creative, not generic
+      - Must be achievable within a 10-minute collaborative story
+      - Should include specific named elements (characters, objects, places)
+      - Must be independent of any story theme or setting
+      
+      Example goals:
+      - "A character named Dr. Vasquez discovers a glowing purple mushroom that can translate ancient languages"
+      - "Someone receives a mysterious phone call from their future self warning about Tuesday"
+      - "A mechanical clockwork bird delivers a message written in invisible ink"
+      
+      Generate ${goals_count} unique goals at ${difficulty} difficulty level:
+
+  competition_goal_scoring:
+    model: ${model_provider}/${model_name}
+    parameters:
+      temperature: 0.1
+      max_tokens: 100
+    input: |
+      You are judging whether specific goals were achieved in a collaborative story.
+      
+      Scoring System:
+      - Score 1: The goal did not happen in the story at all
+      - Score 2: Something similar to the goal happened, but not exactly as stated
+      - Score 3: The exact goal occurred as stated in the story
+      
+      Story Content:
+      ${full_story}
+      
+      Goal to Evaluate: "${goal_statement}"
+      
+      Evaluation Criteria:
+      - Score 3 requires ALL specific elements to match (names, objects, actions)
+      - Score 2 for partial matches or similar but different versions
+      - Score 1 if the core concept is absent
+      
+      Provide only the score (1, 2, or 3) and a brief 10-word explanation.
+      
+      Score and Explanation:
