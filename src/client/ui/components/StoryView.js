@@ -82,10 +82,10 @@ class StoryView {
       keys: true,
       tags: true,
       padding: {
-        left: 1,
+        left: 0,
         right: 1
       },
-      label: ' Recent Inputs ',
+      // No label - we'll add it as content
       border: {
         type: 'line',
         top: false,
@@ -123,14 +123,18 @@ class StoryView {
 
     // Update recent inputs
     const recentInputs = uiState.getRecentInputs();
+    let content = '{bold}Recent Inputs{/bold}\n';
+    
     if (recentInputs.length > 0) {
       const inputsText = recentInputs
         .map((input, index) => this.formatInput(input, index))
         .join('\n');
-      this.inputsBox.setContent(inputsText);
+      content += inputsText;
     } else {
-      this.inputsBox.setContent('{white-fg}No inputs yet...{/white-fg}');
+      content += '{white-fg}No inputs yet...{/white-fg}';
     }
+    
+    this.inputsBox.setContent(content);
   }
 
   formatStory(text) {
