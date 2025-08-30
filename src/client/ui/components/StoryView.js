@@ -14,16 +14,21 @@ class StoryView {
     this.container = blessed.box({
       top: 3,
       left: 0,
-      width: '100%',
-      bottom: 3,  // Leave space for input bar at bottom
+      width: '100%-1',  // Leave 1 char for right border
+      height: '100%-7',  // Full height minus status bar (3) and input bar (3) and buffer (1)
       border: {
-        type: 'line'
+        type: 'line',
+        top: true,
+        bottom: true,
+        left: true,
+        right: true
       },
       style: {
         border: {
           fg: 'white'
         }
-      }
+      },
+      tags: false
     });
 
     // Story content area (scrollable)
